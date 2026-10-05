@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     llm_provider: str = "none"  # none | openai | anthropic | gemini | ollama
     llm_model: str = "offline"
     openai_api_key: str = ""
+    openai_base_url: str = ""   # e.g. https://bedrock-mantle.us-east-1.api.aws/v1
+    openai_project_id: str = ""
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434"
@@ -38,6 +40,15 @@ class Settings(BaseSettings):
     # web enrichment (Firecrawl) — blank = code-only, everything still works
     firecrawl_api_key: str = ""
     firecrawl_base_url: str = "https://api.firecrawl.dev"
+
+    # CORS — comma-separated allowed origins; "*" allows all (dev only)
+    allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    # Rate limiting — requests per minute per IP per endpoint
+    rate_limit_per_minute: int = 60
+
+    # Request body size limit in bytes (default 1 MB)
+    max_body_bytes: int = 1 * 1024 * 1024
 
 
 settings = Settings()
