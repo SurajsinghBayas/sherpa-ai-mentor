@@ -54,7 +54,7 @@ class LLMClient:
 
         `provider`/`api_key`/`base_url` come from the caller's stored
         credentials (BYOK) or a custom endpoint; otherwise env config applies.
-        Any OpenAI-compatible gateway works via `base_url`.
+        Any OpenAI-compatible gateway (including Bedrock Mantle) works via base_url.
         """
         prov = (provider or self.provider).lower()
         mdl = model or self.model
@@ -63,21 +63,27 @@ class LLMClient:
                     api_key or os.getenv("OPENROUTER_API_KEY")
                     or os.getenv("OPENAI_API_KEY")):
                 from openai import OpenAI
-                base = base_url or os.getenv("OPENAI_BASE_URL") or None
-                if prov == "openrouter" and not base:
-                    base = "https://openrouter.ai/api/v1"
-                client = OpenAI(api_key=api_key or os.getenv("OPENROUTER_API_KEY")
-                                or os.getenv("OPENAI_API_KEY"),
-                                base_url=base)
+                effective_key = (api_key
+                                 or os.getenv("OPENAI_API_KEY")
+                                 or os.getenv("OPENROUTER_API_KEY"))
+                effective_base = base_url or os.getenv("OPENAI_BASE_URL") or None
+                if prov == "openrouter" and not effective_base:
+                    effective_base = "https://openrouter.ai/api/v1"
+                client_kwargs: dict = {"api_key": effective_key}
+                if effective_base:
+                    client_kwargs["base_url"] = effective_base
+                project_id = os.getenv("OPENAI_PROJECT_ID", "")
+                if project_id:
+                    client_kwargs["project"] = project_id
+                client = OpenAI(**client_kwargs)
                 extra: dict = {}
                 if prov == "openrouter":
-                    # OpenRouter attribution (optional, improves rate limits/dashboards)
                     extra["extra_headers"] = {
                         "HTTP-Referer": os.getenv("SITE_URL", "http://localhost:3000"),
                         "X-Title": "Sherpa AI Mentor",
                     }
                 r = client.chat.completions.create(
-                    model=os.getenv("LLM_MODEL", "gpt-4o-mini") if not model else mdl,
+                    model=mdl,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": user}],
                     temperature=0.2, max_tokens=1200, **extra)
