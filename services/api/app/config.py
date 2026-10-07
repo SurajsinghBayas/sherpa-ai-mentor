@@ -35,5 +35,9 @@ class Settings(BaseSettings):
     database_url: str = ""
     encryption_key: str = ""  # Fernet key; generated from jwt_secret_key if blank
 
+    # web enrichment (Firecrawl) — blank = code-only, everything still works
+    firecrawl_api_key: str = ""
+    firecrawl_base_url: str = "https://api.firecrawl.dev"
+
 
 settings = Settings()

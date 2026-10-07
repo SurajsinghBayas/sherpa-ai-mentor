@@ -15,6 +15,9 @@ export function Dashboard() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [repoUrl, setRepoUrl] = useState("https://github.com/gothinkster/realworld");
+  const [docsUrls, setDocsUrls] = useState("");
+  const [enrichWeb, setEnrichWeb] = useState(true);
+  const [webNote, setWebNote] = useState("");
   const [repoId, setRepoId] = useState("");
   const [indexing, setIndexing] = useState(false);
   const [tab, setTab] = useState<TabId>("ask");
@@ -63,8 +66,16 @@ export function Dashboard() {
 
   function doIngest() {
     setIndexing(true);
-    api.ingest(repoUrl.trim())
-      .then((j) => { setRepoId(j.repo_id); toast.success(`Indexed ${j.files} files · ${j.chunks} chunks`); })
+    setWebNote("");
+    const urls = docsUrls.split("\n").map((s) => s.trim()).filter(Boolean);
+    api.ingest(repoUrl.trim(), urls, enrichWeb)
+      .then((j) => {
+        setRepoId(j.repo_id);
+        const web = (j.web_sources || []).filter((s) => s.status === "ok").length;
+        const skipped = (j.web_sources || []).find((s) => s.status === "skipped");
+        setWebNote(web ? `+ ${web} web source(s) via Firecrawl` : skipped ? "code-only (set FIRECRAWL_API_KEY for web context)" : "");
+        toast.success(`Indexed ${j.files} files · ${j.chunks} chunks`);
+      })
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "Indexing failed"))
       .finally(() => setIndexing(false));
   }
@@ -83,9 +94,21 @@ export function Dashboard() {
             {indexing && <Loader2 className="animate-spin" />} Index repo
           </Button>
         </CardContent>
+        <CardContent className="space-y-3 pt-0">
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">Docs URLs <span className="font-normal text-muted-foreground">(optional, one per line — scraped via Firecrawl)</span></p>
+            <Textarea value={docsUrls} onChange={(e) => setDocsUrls(e.target.value)} rows={2}
+              placeholder="https://docs.example.com/getting-started" className="font-mono text-xs" />
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked={enrichWeb} onChange={(e) => setEnrichWeb(e.target.checked)} className="size-4 accent-black" />
+            Enrich with web context (repo page + docs via Firecrawl)
+          </label>
+        </CardContent>
         {repoId && (
           <CardContent className="pt-0">
             <Badge variant="success"><CheckCircle2 /> indexed · <span className="font-mono">{repoId}</span></Badge>
+            {webNote && <p className="mt-1.5 text-xs text-muted-foreground">{webNote}</p>}
           </CardContent>
         )}
       </Card>

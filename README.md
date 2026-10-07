@@ -77,6 +77,7 @@ Industry-grade multi-user layer (v0.3):
 - **Neon Postgres** — set `DATABASE_URL=postgresql+psycopg://…@….neon.tech/sherpa?sslmode=require` (see `docs/neon_setup.md`). Blank = local SQLite, zero setup. `docker compose` also ships a local Postgres.
 - **Bring your own keys** — Settings → Keys & Endpoints: add **OpenAI / Anthropic / Gemini / OpenRouter** keys (prefix-validated, Fernet-encrypted, UI shows last4 only) or **any endpoint** (OpenAI-compatible gateway, LiteLLM, Cloudflare AI Gateway, Ollama) with a **Test connection** probe before saving. Pick one per answer in the Mentor.
 - **Credential-scoped Q&A** — `POST /api/ask {key_id | endpoint_id}` resolves only the caller's own credentials (403/404 otherwise, covered in `tests/test_auth.py`).
+- **Web enrichment (Firecrawl)** — ingest scrapes the GitHub repo page + your docs URLs into `web/…` chunks cited like code. Keyless = code-only, evergreen. See `docs/firecrawl_setup.md`.
 - **UI/UX system** — shadcn-style primitives + [Geist](https://fonts.google.com/specimen/Geist) / [Geist Mono](https://fonts.google.com/specimen/Geist+Mono), lucide icons, Sonner toasts, ease-out motion. Rules in `docs/ui_ux_system.md` (distilled from [ui-skills](https://github.com/ibelick/ui-skills) + [emilkowalski/skills](https://github.com/emilkowalski/skills)).
 
 ```bash

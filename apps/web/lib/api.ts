@@ -48,7 +48,9 @@ export const api = {
     req<{ access_token: string }>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }, false),
   me: () => req<{ id: string; email: string; name: string }>("/api/auth/me"),
 
-  ingest: (repo_url: string) => req<{ repo_id: string; files: number; chunks: number }>("/api/ingest", { method: "POST", body: JSON.stringify({ repo_url }) }, false),
+  ingest: (repo_url: string, docs_urls: string[] = [], enrich_web = true) =>
+    req<{ repo_id: string; files: number; chunks: number; web_sources: { url?: string; status: string; reason?: string }[] }>(
+      "/api/ingest", { method: "POST", body: JSON.stringify({ repo_url, docs_urls, enrich_web }) }, false),
   ask: (repo_id: string, question: string, key_id?: string, endpoint_id?: string) =>
     req<{ answer_markdown: string; citations: Citation[]; confidence: number; verify: { grounded: boolean; unchecked_claims: string[] } }>(
       "/api/ask", { method: "POST", body: JSON.stringify({ repo_id, question, key_id, endpoint_id }) }),

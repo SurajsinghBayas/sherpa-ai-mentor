@@ -7,12 +7,16 @@ class IngestRequest(BaseModel):
     repo_url: Optional[str] = None
     local_path: Optional[str] = None
     branch: str = "main"
+    # web enrichment (Firecrawl): scrape repo page + these docs URLs into cited chunks
+    enrich_web: bool = True
+    docs_urls: List[str] = Field(default_factory=list)
 
 
 class IngestResponse(BaseModel):
     repo_id: str
     files: int
     chunks: int
+    web_sources: List[dict] = Field(default_factory=list)
 
 
 class Citation(BaseModel):

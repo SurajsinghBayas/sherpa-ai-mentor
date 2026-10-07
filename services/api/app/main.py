@@ -10,6 +10,7 @@ from .agents.mentor import (answer_question, build_overview, build_tour,
 from .config import settings
 from .db import get_session, init_db
 from .dbmodels import CustomEndpoint, ProviderKey
+from .enrich import enrich_repo
 from .ingest import ingest_source
 from .models import (AskRequest, FreshnessRequest, IngestRequest, OverviewRequest,
                      TaskRequest, TourRequest)
@@ -92,10 +93,21 @@ def ingest(req: IngestRequest):
         repo_id, chunks, meta = ingest_source(req.repo_url, req.local_path, req.branch)
     except Exception as e:
         raise HTTPException(400, f"ingest failed: {e}")
+    web_sources: list = []
+    if req.enrich_web and (req.repo_url or req.docs_urls):
+        # Firecrawl enrichment is best-effort: keyless/failing → code-only.
+        web_chunks, web_sources = enrich_repo(req.repo_url, req.docs_urls)
+        if web_chunks:
+            chunks = chunks + web_chunks
+            roles = meta.setdefault("roles", {})
+            for c in web_chunks:
+                roles.setdefault(c.file, "web docs")
+            meta["web_sources"] = web_sources
     store = RepoStore(settings.data_dir, repo_id)
     store.save(chunks, meta)
     _stores[repo_id] = store
-    return {"repo_id": repo_id, "files": len(store.files()), "chunks": len(chunks)}
+    return {"repo_id": repo_id, "files": len(store.files()),
+            "chunks": len(chunks), "web_sources": web_sources}
 
 
 @app.post("/api/ask")

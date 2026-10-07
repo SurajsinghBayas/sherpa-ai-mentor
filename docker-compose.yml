@@ -9,6 +9,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - DATABASE_URL=${DATABASE_URL:-}
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY:-}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-only-change-me}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - DATA_DIR=/data
