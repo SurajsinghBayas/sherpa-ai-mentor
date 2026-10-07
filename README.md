@@ -1,146 +1,332 @@
-# Sherpa — AI Codebase Mentor 🏔️
+<div align="center">
 
-> An agentic onboarding mentor that reads any code repository and helps newcomers understand it fast — with **every answer grounded in actual code (file:line citations)**.
+<br />
 
-Built for **IM-05 Codebase Mentor: AI Onboarding for Developers**. Production-grade quality inspired by Dots, Muse, and agentic coding assistants — but purpose-built for onboarding.
+<!-- Sherpa logotype -->
+<img src="https://img.shields.io/badge/Sherpa-AI%20Codebase%20Mentor-0a0a0a?style=for-the-badge&labelColor=0a0a0a&color=4a9eff" alt="Sherpa" />
 
-![Stage](https://img.shields.io/badge/stage-2%20prototype-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![CI](https://github.com/SurajsinghBayas/sherpa-ai-mentor/actions/workflows/ci.yml/badge.svg)
+<br /><br />
 
-## What it does
+**Understand any codebase, immediately.**
 
-| IM-05 requirement | Where it lives |
+Sherpa is an agentic AI guide that reads any GitHub repository and answers your questions with verified, file:line grounded citations. No hallucinations. No guessing.
+
+<br />
+
+[![CI](https://github.com/SurajsinghBayas/sherpa-ai-mentor/actions/workflows/ci.yml/badge.svg)](https://github.com/SurajsinghBayas/sherpa-ai-mentor/actions/workflows/ci.yml)
+![License](https://img.shields.io/badge/license-MIT-22c55e?style=flat)
+![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat&logo=next.js)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python)
+
+<br />
+
+</div>
+
+---
+
+## What is Sherpa?
+
+Sherpa is your AI guide through any codebase. Like having a senior engineer on-call, except Sherpa has read every file, remembers every import, and never gets tired of questions.
+
+Every answer is grounded in the actual code snapshot. Sherpa parses every `[file:L1-L2]` citation it generates, checks it exists in the repo, and drops anything it can't verify. Zero hallucinations by design.
+
+```
+You  → "How does user authentication work?"
+
+Sherpa → "Auth flows through POST /api/auth/login. The handler validates
+          credentials with bcrypt, then issues a 24h JWT signed with your
+          configured secret.
+
+          Sources:
+          · app/routers/auth.py:38-44
+          · app/security.py:22-33"
+```
+
+---
+
+## Features
+
+| Feature | Description |
 |---|---|
-| Architecture overview: main parts + how they connect | `POST /api/overview` → `agents/mentor.py::build_overview` + web `ArchGraph` |
-| Guided tours of key flows (e.g. "what happens on signup?") | `POST /api/tours` → `build_tour()` + web `TourPlayer` |
-| How/why Q&A linked to exact files + lines | `POST /api/ask` → `answer_question()` with citation verifier |
-| Suggested starter tasks for first contribution | `POST /api/tasks` → `suggest_starter_tasks()` + web `TaskBoard` |
-| Docs that stay fresh as code changes (optional) | `POST /api/freshness` → `check_freshness()` + `make refresh-docs` |
+| **Grounded Q&A** | Every answer cites `file:line`. The `CitationVerifier` drops unverifiable claims before they reach the UI. |
+| **Architecture maps** | Components, roles, and import edges rendered as a live Mermaid graph. |
+| **Guided tours** | Trace any flow (signup, checkout, upload…) step-by-step with code inline at each stop. |
+| **Starter tasks** | First-PR-sized tasks generated from the actual repo, with files and steps attached. |
+| **Zero-config LLM** | Powered by DeepSeek V3 via Bedrock Mantle — no API key required for any user. |
+| **BYOK** | Power users can add OpenAI / Anthropic / Gemini / custom endpoints. Encrypted at rest. |
+| **JWT + Postgres** | Real multi-user auth, Neon Postgres in prod, SQLite zero-setup fallback. |
 
-**Grounding guarantee:** every claim the agent makes must resolve to a `file:line-range` that exists in the indexed snapshot. The `CitationVerifier` rejects or flags anything else. No silent hallucinations.
+---
 
-## Agentic character (like Dots / Muse)
-
-Sherpa is not a thin RAG wrapper. It runs a tool loop:
+## Architecture
 
 ```
-planner → search_code → read_file → get_graph → synthesize → verify_citations → answer
+┌─────────────────────┐
+│   Next.js 14 UI     │  Sherpa orb · chat · citations · arch graph · tour · tasks
+└────────┬────────────┘
+         │ REST / JSON
+┌────────▼────────────┐
+│   FastAPI (Python)  │  /ingest /ask /overview /tours /tasks /freshness /health
+└──┬────────┬─────────┘
+   │        │
+   ▼        ▼
+ingest   retrieval          agents/mentor.py
+clone/   hybrid FTS         planner → search_code → read_file
+walk +   + vector           → synthesize → CitationVerifier
+chunk    MMR diversity       → verified answer + citations
+   │        │
+   └────────┴─────────────┐
+                           ▼
+                     RepoStore
+                  chunks.json + TF-IDF
+                  (pgvector-ready interface)
 ```
 
-- **Persona:** `packages/core/prompts/system.md` — encouraging senior-mentor tone, always cites, admits uncertainty.
-- **Tools:** `search_code` (FTS + vector, pgvector-ready), `read_file` (exact lines), `get_graph` (imports/call edges).
-- **Memory:** per-repo conversation + indexed snapshot id, so follow-ups stay grounded.
-- **Providers (BYOK):** OpenAI, Anthropic, Gemini, Ollama — via a tiny `LLMClient` interface. **No key?** Offline extractive fallback still demos fully (templates + retrieval), so judges can run with zero setup.
+**Key design choices:**
 
-## Quickstart (2 min, no API key)
+- **Provenance-first chunking** — every chunk carries `file:start_line-end_line`. AST-aware for Python, safe generic splitter for everything else.
+- **Swappable retrieval** — today: SQLite + TF-IDF (zero infra, works offline). Interface matches pgvector for scale.
+- **CitationVerifier** — parses `[file:L1-L2]` markers, checks existence in snapshot, drops ghosts. This is the grounding guarantee.
+- **One-retry self-correction** — if the LLM forgets citations, Sherpa sends a targeted correction prompt and takes the better answer.
+- **SSRF guard** — `/api/ingest` only allows `github.com`, `gitlab.com`, `bitbucket.org`.
+
+---
+
+## Quickstart
+
+### Backend
 
 ```bash
-# 1. backend
 cd services/api
+
+# create env (copy example and fill in values)
+cp ../../.env.example .env
+
+# install
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+
+# start
 uvicorn app.main:app --reload --port 8000
-
-# 2. index a real repo (default demo: a small sample; or point at any local path / GitHub URL)
-curl -X POST localhost:8000/api/ingest -H 'Content-Type: application/json' \
-  -d '{"repo_url": "https://github.com/gothinkster/realworld", "branch": "main"}'
-# → {"repo_id":"...","files":123,"chunks":842}
-
-# 3. ask (grounded)
-curl -X POST localhost:8000/api/ask -H 'Content-Type: application/json' \
-  -d '{"repo_id":"<id>","question":"How does user signup work?"}'
-
-# 4. frontend
-cd apps/web && npm install && npm run dev
-# open http://localhost:3000
 ```
 
-With an LLM key for richer answers:
+### Frontend
 
 ```bash
-export LLM_PROVIDER=openai LLM_MODEL=gpt-4o-mini OPENAI_API_KEY=sk-...
-# or: export LLM_PROVIDER=ollama LLM_MODEL=codellama
-uvicorn app.main:app --reload
+cd apps/web
+npm install
+npm run dev
+# → http://localhost:3000
 ```
 
-Docker:
+### Docker (full stack)
 
 ```bash
 docker compose up --build
 # api → :8000, web → :3000
 ```
 
-## SaaS: auth, database, your own keys
+---
 
-Industry-grade multi-user layer (v0.3):
+## API Reference
 
-- **JWT auth** — `POST /api/auth/register`, `POST /api/auth/login` → Bearer token, `GET /api/auth/me`. Bcrypt hashes, 24h expiry.
-- **Neon Postgres** — set `DATABASE_URL=postgresql+psycopg://…@….neon.tech/sherpa?sslmode=require` (see `docs/neon_setup.md`). Blank = local SQLite, zero setup. `docker compose` also ships a local Postgres.
-- **Bring your own keys** — Settings → Keys & Endpoints: add **OpenAI / Anthropic / Gemini / OpenRouter** keys (prefix-validated, Fernet-encrypted, UI shows last4 only) or **any endpoint** (OpenAI-compatible gateway, LiteLLM, Cloudflare AI Gateway, Ollama) with a **Test connection** probe before saving. Pick one per answer in the Mentor.
-- **Credential-scoped Q&A** — `POST /api/ask {key_id | endpoint_id}` resolves only the caller's own credentials (403/404 otherwise, covered in `tests/test_auth.py`).
-- **Web enrichment (Firecrawl)** — ingest scrapes the GitHub repo page + your docs URLs into `web/…` chunks cited like code. Keyless = code-only, evergreen. See `docs/firecrawl_setup.md`.
-- **UI/UX system** — shadcn-style primitives + [Geist](https://fonts.google.com/specimen/Geist) / [Geist Mono](https://fonts.google.com/specimen/Geist+Mono), lucide icons, Sonner toasts, ease-out motion. Rules in `docs/ui_ux_system.md` (distilled from [ui-skills](https://github.com/ibelick/ui-skills) + [emilkowalski/skills](https://github.com/emilkowalski/skills)).
+All endpoints accept and return JSON.
+
+### Ingest
+
+```http
+POST /api/ingest
+Content-Type: application/json
+
+{
+  "repo_url": "https://github.com/gothinkster/realworld",
+  "branch": "main",
+  "docs_urls": ["https://docs.example.com"],
+  "enrich_web": true
+}
+```
+
+```json
+{ "repo_id": "abc123", "files": 87, "chunks": 1243, "web_sources": [] }
+```
+
+### Ask
+
+```http
+POST /api/ask
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "repo_id": "abc123",
+  "question": "How does user signup work?"
+}
+```
+
+```json
+{
+  "answer_markdown": "User signup flows through POST /api/auth/register...",
+  "citations": [
+    { "file": "app/routers/auth.py", "start_line": 22, "end_line": 34, "snippet": "..." }
+  ],
+  "confidence": 0.85,
+  "verify": { "grounded": true, "unchecked_claims": [] }
+}
+```
+
+### Overview
+
+```http
+POST /api/overview
+{ "repo_id": "abc123" }
+```
+
+```json
+{
+  "summary": "...",
+  "mermaid": "graph TD\n  app --> routers\n  routers --> models",
+  "components": [{ "name": "routers · route/handler", "path": "routers", "role": "route/handler" }],
+  "edges": [{ "from": "routers", "to": "models", "via": "imports" }]
+}
+```
+
+### Tours · Tasks · Freshness
+
+```http
+POST /api/tours   { "repo_id": "...", "flow": "user signup" }
+POST /api/tasks   { "repo_id": "...", "level": "beginner" }
+POST /api/freshness { "repo_id": "...", "docs_markdown": "..." }
+```
+
+---
+
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `JWT_SECRET_KEY` | ✅ | Long random string for JWT signing |
+| `DATABASE_URL` | Prod only | Neon Postgres connection string |
+| `ENCRYPTION_KEY` | Prod only | Fernet key for encrypting stored API keys |
+| `OPENAI_API_KEY` | — | Server-side LLM key (Bedrock Mantle pre-configured) |
+| `OPENAI_BASE_URL` | — | LLM base URL (default: Bedrock Mantle) |
+| `LLM_MODEL` | — | Model name (default: `deepseek.v3.2`) |
+| `FIRECRAWL_API_KEY` | — | Optional — enables web doc scraping |
+| `ALLOWED_ORIGINS` | Prod | Comma-separated CORS origins |
+
+Generate production secrets:
 
 ```bash
 export JWT_SECRET_KEY="$(openssl rand -hex 32)"
 export ENCRYPTION_KEY="$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
-# + DATABASE_URL for Neon, then start the API as usual
 ```
 
-## Repo layout
+---
+
+## Project Layout
 
 ```
 sherpa-ai-mentor/
-  services/api/        # FastAPI: ingest, chunk, store, retrieval, agents, routers
-    app/
-      config.py        # env + provider config
-      models.py        # pydantic schemas (AskRequest, Citation, TourStep...)
-      chunk.py         # AST-aware chunking (py/js/ts/go fallback-safe)
-      store.py         # SQLite FTS + vector (numpy cosine), pgvector-ready interface
-      ingest.py        # clone/walk, ignore rules, language detect
-      retrieval.py     # hybrid search + MMR
-      agents/mentor.py # overview, tour, qa, tasks, freshness + citation verifier
-      main.py          # routes: /ingest /ask /overview /tours /tasks /freshness /health
-    tests/             # grounding + chunk tests (must pass in CI)
-  apps/web/            # Next.js: chat with citations, arch graph, tour player, task board
-  packages/core/prompts/system.md  # Sherpa persona
-  evals/               # golden Q&A + 5-person user-study protocol for Stage 3
-  docs/                # architecture, demo script, Stage-1 pitch
+├── apps/
+│   ├── web/                    # Next.js 14 frontend
+│   │   ├── app/
+│   │   │   ├── page.tsx        # Landing page
+│   │   │   ├── dashboard/      # Main app
+│   │   │   ├── login/          # Auth
+│   │   │   └── signup/
+│   │   └── components/
+│   │       ├── sherpa-orb.tsx  # Animated Sherpa character
+│   │       ├── dashboard.tsx   # Chat UI + panels
+│   │       ├── site-header.tsx
+│   │       └── ui/primitives.tsx
+│   └── ad/                     # Remotion product video
+│       └── src/SherpaAd.tsx    # 30-second ad, 5 scenes
+├── services/
+│   └── api/                    # FastAPI backend
+│       └── app/
+│           ├── main.py         # Routes + security middleware
+│           ├── config.py       # Settings (pydantic-settings)
+│           ├── chunk.py        # AST-aware code chunker
+│           ├── store.py        # RepoStore: FTS + vector
+│           ├── ingest.py       # Clone/walk/chunk pipeline
+│           ├── retrieval.py    # Hybrid search + MMR
+│           ├── agents/
+│           │   └── mentor.py   # LLMClient + all agent flows
+│           └── routers/
+│               ├── auth.py     # Register / login / me
+│               └── keys.py     # BYOK key management
+├── packages/
+│   └── core/prompts/
+│       └── system.md           # Sherpa persona prompt
+├── evals/
+│   └── golden_qa.json          # 12 grounded Q&A pairs for CI
+├── docs/                       # Architecture, pitch, setup guides
+└── docker-compose.yml
 ```
 
-## API
+---
 
-- `POST /api/ingest {repo_url|local_path, branch}` → `{repo_id, files, chunks}`
-- `POST /api/ask {repo_id, question, history?}` → `{answer_markdown, citations[{file,start_line,end_line,snippet}], confidence, verify:{grounded, ungrouded_claims}}`
-- `POST /api/overview {repo_id}` → `{components[{name,path,role}], edges[{from,to,via}], mermaid, summary}`
-- `POST /api/tours {repo_id, flow}` → `{title, steps[{caption, file, start_line, end_line, code}], estimated_minutes}`
-- `POST /api/tasks {repo_id, level}` → `{tasks[{title, why, files, steps, difficulty}]}`
-- `POST /api/freshness {repo_id, docs_markdown}` → `{stale_sections[{heading, reason, suggested_update}]}`
-- `GET /health` `GET /api/repos`
+## Security
 
-## How grounding works
+- **CORS** — locked to `ALLOWED_ORIGINS` env var (defaults to `localhost:3000` only)
+- **Rate limiting** — 60 req/min per IP per endpoint (configurable via `RATE_LIMIT_PER_MINUTE`)
+- **Security headers** — `X-Content-Type-Options`, `X-Frame-Options`, `HSTS`, `Referrer-Policy`, `Permissions-Policy`
+- **Body size limit** — 1 MB max, configurable via `MAX_BODY_BYTES`
+- **SSRF guard** — `/api/ingest` only allows `github.com`, `gitlab.com`, `bitbucket.org`
+- **JWT auth** — bcrypt hashed passwords, 24h token expiry, Bearer scheme
+- **Credential encryption** — Fernet encryption on all stored API keys; UI shows last 4 chars only
 
-1. Chunk files with `file:start-end` provenance preserved.
-2. Retrieve top-k with hybrid FTS+vector + MMR diversity.
-3. LLM (or offline template) drafts answer **with required `[file:L1-L2]` markers**.
-4. `CitationVerifier` parses markers, checks each exists in snapshot, drops/flags failures, attaches snippets.
-5. API returns only verified citations. UI renders each as a clickable chip that opens the exact lines.
+---
 
-## Evals + user test (Stage 3)
+## Development
 
-- `evals/golden_qa.json` — 12 grounded Q&A pairs; `make eval` checks citation precision.
-- `evals/user_study.md` — 5-newcomer protocol (with/without Sherpa, time-to-first-PR). Record results in `docs/user_study_results.md`.
+```bash
+# Run tests
+cd services/api
+pytest tests/ -v
+
+# Lint
+ruff check app/
+
+# Type-check frontend
+cd apps/web
+npm run build
+
+# Render the ad video
+cd apps/ad
+npm install
+npm run render
+# → out/sherpa-ad.mp4
+```
+
+---
 
 ## Roadmap
 
-- [x] Stage 1: pitch (`docs/stage1_pitch.md`)
-- [x] Stage 2: Q&A + overview for one repo (this build)
-- [ ] Stage 3: tours, starter tasks, freshness watcher, user test
-- [ ] pgvector + tree-sitter + GitHub App auto-refresh on push
+- [x] Stage 1 — pitch and architecture design
+- [x] Stage 2 — grounded Q&A + architecture overview
+- [x] Stage 3 — tours, starter tasks, freshness watcher, BYOK, auth
+- [x] Production UI — animated Sherpa agent, dark design system, chat interface
+- [x] Zero-config LLM — Bedrock Mantle, no user API keys required
+- [ ] pgvector — swap TF-IDF for hosted embeddings, no code changes needed
+- [ ] Tree-sitter — richer AST chunking for TypeScript, Go, Rust
+- [ ] GitHub App — webhook auto-reindex on push, `check_freshness` opens PRs
+- [ ] Streaming — SSE responses for long answers
+
+---
 
 ## Contributing
 
-See `CONTRIBUTING.md`. PRs welcome — good first issues are generated by Sherpa itself (`POST /api/tasks`).
+Good first issues are generated by Sherpa itself — run `POST /api/tasks` against this repo. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+---
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see [`LICENSE`](LICENSE).
+
+---
+
+<div align="center">
+  <sub>Built with care. Every answer is grounded.</sub>
+</div>
