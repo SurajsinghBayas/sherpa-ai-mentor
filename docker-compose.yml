@@ -1,0 +1,24 @@
+services:
+  api:
+    build: ./services/api
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_PROVIDER=${LLM_PROVIDER:-none}
+      - LLM_MODEL=${LLM_MODEL:-offline}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DATA_DIR=/data
+    volumes:
+      - sherpa-data:/data
+  web:
+    build: ./apps/web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - api
+
+volumes:
+  sherpa-data:

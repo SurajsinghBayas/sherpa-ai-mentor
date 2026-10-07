@@ -1,0 +1,6 @@
+[
+  {"q": "How does user signup work?", "must_mention": ["route", "user"], "min_citations": 1},
+  {"q": "Where is authentication handled?", "must_mention": ["auth"], "min_citations": 1},
+  {"q": "What is the entrypoint of the app?", "must_mention": ["main", "app"], "min_citations": 1},
+  {"q": "How is data validated on input?", "must_mention": ["valid"], "min_citations": 1}
+]
