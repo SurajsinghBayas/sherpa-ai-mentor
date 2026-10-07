@@ -43,23 +43,55 @@ class LLMClient:
             return True
         return False
 
-    def compose(self, system: str, user: str) -> str:
-        # OpenAI path (lazy import so offline install stays light)
+    def compose(self, system: str, user: str, *,
+                  provider: str | None = None,
+                  model: str | None = None,
+                  api_key: str | None = None,
+                  base_url: str | None = None) -> str:
+        """Compose with optional per-request credentials.
+
+        `provider`/`api_key`/`base_url` come from the caller's stored
+        credentials (BYOK) or a custom endpoint; otherwise env config applies.
+        Any OpenAI-compatible gateway works via `base_url`.
+        """
+        prov = (provider or self.provider).lower()
+        mdl = model or self.model
         try:
-            if self.provider == "openai" and os.getenv("OPENAI_API_KEY"):
+            if prov == "openai" and (api_key or os.getenv("OPENAI_API_KEY")):
                 from openai import OpenAI
-                client = OpenAI()
+                client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"),
+                                base_url=base_url or os.getenv("OPENAI_BASE_URL") or None)
                 r = client.chat.completions.create(
-                    model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+                    model=os.getenv("LLM_MODEL", "gpt-4o-mini") if not model else mdl,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": user}],
                     temperature=0.2, max_tokens=1200)
                 return r.choices[0].message.content or ""
-            if self.provider == "ollama":
+            if prov == "anthropic" and (api_key or os.getenv("ANTHROPIC_API_KEY")):
+                import anthropic
+                client = anthropic.Anthropic(
+                    api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
+                m = client.messages.create(
+                    model=mdl if model else "claude-3-5-haiku-latest",
+                    max_tokens=1200, system=system,
+                    messages=[{"role": "user", "content": user}])
+                return "".join(b.text for b in m.content
+                                if getattr(b, "type", "") == "text")
+            if prov == "ollama" or base_url:
                 import httpx
-                base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+                base = (base_url or os.getenv("OLLAMA_BASE_URL",
+                                              "http://localhost:11434")).rstrip("/")
+                if base.endswith("/v1"):  # OpenAI-compatible gateway, not Ollama
+                    from openai import OpenAI
+                    client = OpenAI(api_key=api_key or "not-needed", base_url=base)
+                    r = client.chat.completions.create(
+                        model=mdl, messages=[
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user}],
+                        temperature=0.2, max_tokens=1200)
+                    return r.choices[0].message.content or ""
                 r = httpx.post(f"{base}/api/generate", json={
-                    "model": os.getenv("LLM_MODEL", "codellama"),
+                    "model": mdl if model else os.getenv("LLM_MODEL", "codellama"),
                     "prompt": f"{system}\n\n{user}", "stream": False}, timeout=60)
                 r.raise_for_status()
                 return r.json().get("response", "")
@@ -150,15 +182,18 @@ def _offline_qa(question: str, hits: List[Tuple[Chunk, float]]) -> str:
 
 # ---------- public agent entry points ----------
 
-def answer_question(store: RepoStore, question: str, k: int = 8) -> dict:
+def answer_question(store: RepoStore, question: str, k: int = 8,
+                    llm_override: dict | None = None) -> dict:
     hits = retrieve(store, expand_aliases(question), k)
     ctx = _context(hits)
     draft = ""
-    if llm.available:
+    override = llm_override or {}
+    if llm.available or override.get("api_key") or override.get("base_url"):
         user = (f"Question: {question}\n\nCode context (cite as [file:L1-L2]):\n{ctx}\n\n"
                 "Rules: answer only from context. Every bullet must end with a citation. "
                 "If unsure, say so.")
-        draft = llm.compose(SYSTEM_PROMPT, user)
+        draft = llm.compose(SYSTEM_PROMPT, user, **{k: v for k, v in override.items()
+                                                     if v is not None})
         if draft.startswith("__LLM_ERROR__"):
             draft = ""
     if not draft:

@@ -1,19 +1,34 @@
 """Sherpa API — FastAPI routes. All answers cite file:line. CORS open for the demo web app."""
 import os
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
 from .agents.mentor import (answer_question, build_overview, build_tour,
                             check_freshness, suggest_starter_tasks)
 from .config import settings
+from .db import get_session, init_db
+from .dbmodels import CustomEndpoint, ProviderKey
 from .ingest import ingest_source
 from .models import (AskRequest, FreshnessRequest, IngestRequest, OverviewRequest,
                      TaskRequest, TourRequest)
+from .routers import auth as auth_router
+from .routers import keys as keys_router
+from .security import decrypt_secret, get_optional_user
 from .store import RepoStore
 
-app = FastAPI(title="Sherpa — AI Codebase Mentor", version="0.2.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="Sherpa — AI Codebase Mentor", version="0.3.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                    allow_headers=["*"])
+app.include_router(auth_router.router)
+app.include_router(keys_router.router)
 
 _stores: dict[str, RepoStore] = {}
 
@@ -29,9 +44,35 @@ def get_store(repo_id: str) -> RepoStore:
     return s
 
 
+def _resolve_llm(req: AskRequest, user, db: Session) -> dict:
+    """Map the caller's stored credential (key or endpoint) to an LLM override."""
+    if req.key_id:
+        if user is None:
+            raise HTTPException(401, "sign in to use a stored API key")
+        k = db.query(ProviderKey).filter(ProviderKey.id == req.key_id,
+                                         ProviderKey.user_id == user.id).first()
+        if not k:
+            raise HTTPException(404, "api key not found")
+        return {"provider": k.provider, "model": k.model,
+                "api_key": decrypt_secret(k.key_enc)}
+    if req.endpoint_id:
+        if user is None:
+            raise HTTPException(401, "sign in to use a stored endpoint")
+        e = db.query(CustomEndpoint).filter(CustomEndpoint.id == req.endpoint_id,
+                                            CustomEndpoint.user_id == user.id).first()
+        if not e:
+            raise HTTPException(404, "endpoint not found")
+        return {"provider": "openai", "model": e.model,
+                "base_url": e.base_url,
+                "api_key": decrypt_secret(e.api_key_enc) if e.api_key_enc else "not-needed"}
+    return {}
+
+
 @app.get("/health")
 def health():
-    return {"ok": True, "service": settings.app_name}
+    return {"ok": True, "service": settings.app_name,
+            "db": "postgres" if settings.database_url else "sqlite",
+            "auth": True}
 
 
 @app.get("/api/repos")
@@ -58,8 +99,10 @@ def ingest(req: IngestRequest):
 
 
 @app.post("/api/ask")
-def ask(req: AskRequest):
-    return answer_question(get_store(req.repo_id), req.question)
+def ask(req: AskRequest, user=Depends(get_optional_user),
+        db: Session = Depends(get_session)):
+    return answer_question(get_store(req.repo_id), req.question,
+                           llm_override=_resolve_llm(req, user, db))
 
 
 @app.post("/api/overview")

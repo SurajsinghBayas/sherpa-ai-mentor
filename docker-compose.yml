@@ -8,9 +8,25 @@ services:
       - LLM_MODEL=${LLM_MODEL:-offline}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-only-change-me}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - DATA_DIR=/data
     volumes:
       - sherpa-data:/data
+    depends_on:
+      db:
+        condition: service_started
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-sherpa}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sherpa}
+      - POSTGRES_DB=${POSTGRES_DB:-sherpa}
+    ports:
+      - "5432:5432"
+    volumes:
+      - sherpa-pg:/var/lib/postgresql/data
   web:
     build: ./apps/web
     ports:
@@ -22,3 +38,4 @@ services:
 
 volumes:
   sherpa-data:
+  sherpa-pg:

@@ -26,6 +26,9 @@ class AskRequest(BaseModel):
     repo_id: str
     question: str
     history: List[dict] = Field(default_factory=list)
+    # SaaS overrides: use one of the caller's stored credentials for this answer.
+    key_id: Optional[str] = None       # ProviderKey id (their own OpenAI/Anthropic/Gemini key)
+    endpoint_id: Optional[str] = None  # CustomEndpoint id (any OpenAI-compatible / Ollama URL)
 
 
 class VerifyReport(BaseModel):
@@ -116,3 +119,64 @@ class StaleSection(BaseModel):
 class FreshnessResponse(BaseModel):
     stale_sections: List[StaleSection]
     fresh: bool
+
+
+# ---------- SaaS: auth ----------
+
+class UserCreate(BaseModel):
+    name: str = ""
+    email: str
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class UserOut(BaseModel):
+    id: str
+    email: str
+    name: str
+    created_at: str = ""
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+# ---------- SaaS: user-owned LLM credentials ----------
+
+class ProviderKeyCreate(BaseModel):
+    label: str = ""
+    provider: str  # openai | anthropic | gemini
+    model: str = ""
+    api_key: str = Field(min_length=4, max_length=500)
+
+
+class ProviderKeyOut(BaseModel):
+    id: str
+    label: str
+    provider: str
+    model: str
+    last4: str = ""
+    created_at: str = ""
+
+
+class CustomEndpointCreate(BaseModel):
+    name: str = ""
+    base_url: str  # e.g. https://my-gateway.internal/v1 or http://localhost:11434
+    kind: str = "openai-compatible"  # openai-compatible | ollama
+    model: str = ""
+    api_key: str = ""  # optional (Ollama needs none)
+
+
+class CustomEndpointOut(BaseModel):
+    id: str
+    name: str
+    base_url: str
+    kind: str
+    model: str
+    has_key: bool = False
+    created_at: str = ""
