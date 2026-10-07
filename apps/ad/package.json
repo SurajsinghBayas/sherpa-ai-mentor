@@ -1,0 +1,26 @@
+{
+  "name": "sherpa-ad",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "remotion studio",
+    "render": "remotion render SherpaAd out/sherpa-ad.mp4 --codec h264",
+    "render:gif": "remotion render SherpaAd out/sherpa-ad.gif",
+    "still": "remotion still SherpaAd --frame 30 out/thumbnail.png"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.*",
+    "remotion": "4.0.*",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "framer-motion": "11.11.9"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.1",
+    "typescript": "5.4.5"
+  },
+  "remotion": {
+    "entryPoint": "src/index.ts"
+  }
+}
