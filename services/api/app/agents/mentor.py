@@ -57,15 +57,25 @@ class LLMClient:
         prov = (provider or self.provider).lower()
         mdl = model or self.model
         try:
-            if prov == "openai" and (api_key or os.getenv("OPENAI_API_KEY")):
+            if prov in ("openai", "openrouter") and (api_key or os.getenv("OPENAI_API_KEY")):
                 from openai import OpenAI
+                base = base_url or os.getenv("OPENAI_BASE_URL") or None
+                if prov == "openrouter" and not base:
+                    base = "https://openrouter.ai/api/v1"
                 client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"),
-                                base_url=base_url or os.getenv("OPENAI_BASE_URL") or None)
+                                base_url=base)
+                extra: dict = {}
+                if prov == "openrouter":
+                    # OpenRouter attribution (optional, improves rate limits/dashboards)
+                    extra["extra_headers"] = {
+                        "HTTP-Referer": os.getenv("SITE_URL", "http://localhost:3000"),
+                        "X-Title": "Sherpa AI Mentor",
+                    }
                 r = client.chat.completions.create(
                     model=os.getenv("LLM_MODEL", "gpt-4o-mini") if not model else mdl,
                     messages=[{"role": "system", "content": system},
                               {"role": "user", "content": user}],
-                    temperature=0.2, max_tokens=1200)
+                    temperature=0.2, max_tokens=1200, **extra)
                 return r.choices[0].message.content or ""
             if prov == "anthropic" and (api_key or os.getenv("ANTHROPIC_API_KEY")):
                 import anthropic

@@ -82,6 +82,20 @@ def test_provider_keys_crud(client):
     assert client.get("/api/keys", headers=h).json() == []
 
 
+def test_openrouter_key_accepted(client):
+    token = _register(client, "openrouter@sherpa.dev")
+    h = {"Authorization": f"Bearer {token}"}
+    # wrong prefix rejected
+    assert client.post("/api/keys", headers=h, json={
+        "provider": "openrouter", "api_key": "sk-notopenrouter"}).status_code == 422
+    good = client.post("/api/keys", headers=h, json={
+        "label": "or", "provider": "openrouter",
+        "model": "anthropic/claude-3.5-haiku",
+        "api_key": "sk-or-test1234567890"})
+    assert good.status_code == 201, good.text
+    assert good.json()["last4"] == "…7890"
+
+
 def test_endpoints_crud_and_probe(client):
     token = _register(client, "Edsger@sherpa.dev".lower())
     h = {"Authorization": f"Bearer {token}"}

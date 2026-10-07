@@ -12,6 +12,7 @@ const PROVIDERS = [
   { id: "openai", label: "OpenAI", hint: "sk-…", models: ["gpt-4o-mini", "gpt-4o"] },
   { id: "anthropic", label: "Anthropic", hint: "sk-ant-…", models: ["claude-3-5-haiku-latest", "claude-3-5-sonnet-latest"] },
   { id: "gemini", label: "Google Gemini", hint: "AI…", models: ["gemini-1.5-flash", "gemini-1.5-pro"] },
+  { id: "openrouter", label: "OpenRouter", hint: "sk-or-…", models: ["openai/gpt-4o-mini", "anthropic/claude-3.5-haiku", "google/gemini-flash-1.5", "meta-llama/llama-3.1-70b-instruct"] },
 ];
 
 export function Settings() {
@@ -95,7 +96,7 @@ export function Settings() {
       <Card className="animate-fade-up">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><KeyRound className="size-4" /> Provider keys</CardTitle>
-          <CardDescription>OpenAI, Anthropic, or Gemini. Pick one per answer in the Mentor.</CardDescription>
+          <CardDescription>OpenAI, Anthropic, Gemini, or OpenRouter. Pick one per answer in the Mentor.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {keys.length > 0 && (

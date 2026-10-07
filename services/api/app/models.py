@@ -150,7 +150,7 @@ class Token(BaseModel):
 
 class ProviderKeyCreate(BaseModel):
     label: str = ""
-    provider: str  # openai | anthropic | gemini
+    provider: str  # openai | anthropic | gemini | openrouter
     model: str = ""
     api_key: str = Field(min_length=4, max_length=500)
 

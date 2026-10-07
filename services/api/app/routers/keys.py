@@ -15,9 +15,10 @@ from ..security import decrypt_secret, encrypt_secret, get_current_user
 
 router = APIRouter(tags=["credentials"])
 
-PROVIDERS = {"openai", "anthropic", "gemini"}
+PROVIDERS = {"openai", "anthropic", "gemini", "openrouter"}
 DEFAULT_MODELS = {"openai": "gpt-4o-mini", "anthropic": "claude-3-5-haiku-latest",
-                  "gemini": "gemini-1.5-flash"}
+                  "gemini": "gemini-1.5-flash",
+                  "openrouter": "openai/gpt-4o-mini"}
 
 
 def _key_out(k: ProviderKey) -> ProviderKeyOut:
@@ -71,7 +72,8 @@ def delete_key(key_id: str, user: User = Depends(get_current_user),
 
 
 def _check_prefix(provider: str, key: str) -> None:
-    hints = {"openai": "sk-", "anthropic": "sk-ant-", "gemini": "AI"}
+    hints = {"openai": "sk-", "anthropic": "sk-ant-", "gemini": "AI",
+             "openrouter": "sk-or-"}
     if not key.startswith(hints[provider]):
         raise HTTPException(422, f"that doesn't look like an {provider} key "
                                  f"(expected to start with {hints[provider]!r})")

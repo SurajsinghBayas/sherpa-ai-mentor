@@ -19,7 +19,7 @@ const FEATURES = [
   { icon: Map, title: "Architecture maps", body: "Components, roles, and import edges rendered as a mermaid graph — the map before the maze." },
   { icon: Route, title: "Guided tours", body: "Follow signup → handler → service → model step by step, with the code inline at each stop." },
   { icon: Sparkles, title: "Starter tasks", body: "First-PR-sized tasks generated from the actual repo, with files and steps attached." },
-  { icon: KeyRound, title: "Bring your own keys", body: "Add OpenAI, Anthropic, Gemini keys or any OpenAI-compatible endpoint. Encrypted at rest, last4 only in UI." },
+  { icon: KeyRound, title: "Bring your own keys", body: "Add OpenAI, Anthropic, Gemini, or OpenRouter keys — or any OpenAI-compatible endpoint. Encrypted at rest, last4 only in UI." },
   { icon: ShieldCheck, title: "JWT + Postgres", body: "Real multi-user auth, Neon Postgres in prod, SQLite zero-setup fallback for local demos." },
 ];
 
