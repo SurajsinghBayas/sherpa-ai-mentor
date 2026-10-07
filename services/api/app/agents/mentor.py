@@ -35,6 +35,8 @@ class LLMClient:
     def available(self) -> bool:
         if self.provider in ("openai",):
             return bool(os.getenv("OPENAI_API_KEY"))
+        if self.provider in ("openrouter",):
+            return bool(os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY"))
         if self.provider in ("anthropic",):
             return bool(os.getenv("ANTHROPIC_API_KEY"))
         if self.provider in ("gemini", "google"):
@@ -57,12 +59,15 @@ class LLMClient:
         prov = (provider or self.provider).lower()
         mdl = model or self.model
         try:
-            if prov in ("openai", "openrouter") and (api_key or os.getenv("OPENAI_API_KEY")):
+            if prov in ("openai", "openrouter") and (
+                    api_key or os.getenv("OPENROUTER_API_KEY")
+                    or os.getenv("OPENAI_API_KEY")):
                 from openai import OpenAI
                 base = base_url or os.getenv("OPENAI_BASE_URL") or None
                 if prov == "openrouter" and not base:
                     base = "https://openrouter.ai/api/v1"
-                client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"),
+                client = OpenAI(api_key=api_key or os.getenv("OPENROUTER_API_KEY")
+                                or os.getenv("OPENAI_API_KEY"),
                                 base_url=base)
                 extra: dict = {}
                 if prov == "openrouter":
@@ -192,6 +197,18 @@ def _offline_qa(question: str, hits: List[Tuple[Chunk, float]]) -> str:
 
 # ---------- public agent entry points ----------
 
+def _llm_prompt(question: str, ctx: str) -> str:
+    return (
+        f"Question: {question}\n\nCode context:\n{ctx}\n\n"
+        "CITATION FORMAT (mandatory): every factual bullet must end with one or more "
+        "citations copied EXACTLY from a '--- path:start-end ---' header above, e.g. "
+        "[backend/routers/hospitals.py:1-25]. Use the real path and real numbers. "
+        "NEVER write placeholders like [file:L1-L2]. "
+        "Answer only from the context above. If the context is insufficient, say "
+        "\"I couldn't find this in the indexed code\" and suggest where to look."
+    )
+
+
 def answer_question(store: RepoStore, question: str, k: int = 8,
                     llm_override: dict | None = None) -> dict:
     hits = retrieve(store, expand_aliases(question), k)
@@ -199,13 +216,27 @@ def answer_question(store: RepoStore, question: str, k: int = 8,
     draft = ""
     override = llm_override or {}
     if llm.available or override.get("api_key") or override.get("base_url"):
-        user = (f"Question: {question}\n\nCode context (cite as [file:L1-L2]):\n{ctx}\n\n"
-                "Rules: answer only from context. Every bullet must end with a citation. "
-                "If unsure, say so.")
-        draft = llm.compose(SYSTEM_PROMPT, user, **{k: v for k, v in override.items()
-                                                     if v is not None})
+        draft = llm.compose(SYSTEM_PROMPT, _llm_prompt(question, ctx),
+                            **{k: v for k, v in override.items() if v is not None})
         if draft.startswith("__LLM_ERROR__"):
             draft = ""
+        else:
+            # agentic self-correction: one retry when the model forgot citations
+            _, cites0, _ = verify_citations(store, draft)
+            if not cites0 and hits:
+                retry = (draft + "\n\nREWRITE with citations: your answer above has no "
+                         "valid [path:L1-L2] citations. Rewrite it so EVERY bullet ends "
+                         "with a citation copied exactly from the context headers.")
+                draft2 = llm.compose(
+                    SYSTEM_PROMPT, _llm_prompt(question, ctx) +
+                    f"\n\nYour rejected draft (fix its citations):\n{retry[-3000:]}",
+                    **{k: v for k, v in override.items() if v is not None})
+                if draft2 and not draft2.startswith("__LLM_ERROR__"):
+                    _, cites2, _ = verify_citations(store, draft2)
+                    if len(cites2) >= len(cites0):
+                        draft = draft2
+    if not draft:
+        draft = _offline_qa(question, hits)
     if not draft:
         draft = _offline_qa(question, hits)
     _, citations, dropped = verify_citations(store, draft)
