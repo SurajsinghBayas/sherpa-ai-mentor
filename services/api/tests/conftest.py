@@ -17,6 +17,15 @@ def no_real_email(monkeypatch):
     monkeypatch.setattr(settings, "google_client_id", "test-client.apps.googleusercontent.com")
 
 
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    """Every test starts with empty rate-limit counters (they are per process)."""
+    from app.guards import limiter
+    limiter.clear()
+    yield
+    limiter.clear()
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))

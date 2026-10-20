@@ -14,12 +14,13 @@ import secrets
 import time
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_session
 from ..dbmodels import EmailOtp, User
+from ..guards import enforce, ip_limit
 from ..mailer import MailError, mail_configured, otp_email, send_mail
 from ..models import GoogleAuth, LoginRequest, OtpRequest, OtpVerify, Token, UserCreate, UserOut
 from ..security import (create_access_token, get_current_user, hash_password,
@@ -40,7 +41,10 @@ def _out(user: User) -> UserOut:
                    created_at=str(user.created_at or ""))
 
 
-@router.post("/register", response_model=Token, status_code=201)
+# Per-IP limits on the unauthenticated routes: stop password guessing, account
+# spraying, and using our Gmail sender to mail-bomb people (Gmail caps us at ~500/day).
+@router.post("/register", response_model=Token, status_code=201,
+             dependencies=[Depends(ip_limit("auth-register", 5)), Depends(ip_limit("auth-register-h", 30, 3600))])
 def register(body: UserCreate, db: Session = Depends(get_session)):
     email = body.email.strip().lower()
     if not EMAIL_RE.match(email):
@@ -55,9 +59,11 @@ def register(body: UserCreate, db: Session = Depends(get_session)):
     return Token(access_token=create_access_token(user.id))
 
 
-@router.post("/login", response_model=Token)
-def login(body: LoginRequest, db: Session = Depends(get_session)):
-    user = db.query(User).filter(User.email == body.email.strip().lower()).first()
+@router.post("/login", response_model=Token, dependencies=[Depends(ip_limit("auth-login", 10))])
+def login(body: LoginRequest, request: Request, db: Session = Depends(get_session)):
+    email = body.email.strip().lower()
+    enforce(request, "auth-login-email", 20, 900, who=email)  # guessing one account from many IPs
+    user = db.query(User).filter(User.email == email).first()
     if user and not user.password_hash:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED,
                             "this account signs in with an email code or Google")
@@ -77,7 +83,7 @@ def me(user: User = Depends(get_current_user)):
 def auth_config():
     """Which sign-in methods this server offers (the web app hides the rest)."""
     return {"google_client_id": settings.google_client_id or None,
-            "email_otp": mail_configured() or settings.environment.lower() != "production",
+            "email_otp": mail_configured() or not settings.is_production,
             "password": True}
 
 
@@ -105,7 +111,8 @@ def _session_for(user: User) -> Token:
     return Token(access_token=create_access_token(user.id))
 
 
-@router.post("/otp/request")
+@router.post("/otp/request", dependencies=[Depends(ip_limit("otp-request", 5)),
+                                           Depends(ip_limit("otp-request-h", 20, 3600))])
 def otp_request(body: OtpRequest, db: Session = Depends(get_session)):
     email, purpose = _email(body.email), _purpose(body.purpose)
     exists = db.query(User).filter(User.email == email).first() is not None
@@ -134,7 +141,7 @@ def otp_request(body: OtpRequest, db: Session = Depends(get_session)):
         except MailError:
             db.rollback()
             raise HTTPException(502, "couldn't send the email right now; try again in a minute")
-    elif settings.environment.lower() == "production":
+    elif settings.is_production:
         db.rollback()
         raise HTTPException(503, "email sign-in is not configured on this server")
     else:
@@ -143,7 +150,7 @@ def otp_request(body: OtpRequest, db: Session = Depends(get_session)):
     return {"sent": True, "expires_in": settings.otp_ttl_seconds, "resend_in": OTP_RESEND_SECONDS}
 
 
-@router.post("/otp/verify", response_model=Token)
+@router.post("/otp/verify", response_model=Token, dependencies=[Depends(ip_limit("otp-verify", 15))])
 def otp_verify(body: OtpVerify, db: Session = Depends(get_session)):
     email, purpose = _email(body.email), _purpose(body.purpose)
     code = re.sub(r"\D", "", body.code)
@@ -195,7 +202,7 @@ def _verify_google(credential: str) -> dict:
     return claims
 
 
-@router.post("/google", response_model=Token)
+@router.post("/google", response_model=Token, dependencies=[Depends(ip_limit("auth-google", 20))])
 def google(body: GoogleAuth, db: Session = Depends(get_session)):
     """Sign in or sign up with a Google ID token (same endpoint for both)."""
     claims = _verify_google(body.credential)

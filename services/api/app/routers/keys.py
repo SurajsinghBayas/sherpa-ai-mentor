@@ -4,11 +4,12 @@ Keys are Fernet-encrypted at rest; the API only ever returns `last4`.
 `POST /api/keys/test` and `/api/endpoints/test` validate without persisting.
 """
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..dbmodels import CustomEndpoint, ProviderKey, User
+from ..guards import check_outbound_url, enforce
 from ..models import (CustomEndpointCreate, CustomEndpointOut, ProviderKeyCreate,
                       ProviderKeyOut)
 from ..security import decrypt_secret, encrypt_secret, get_current_user
@@ -100,9 +101,7 @@ def _ep_out(e: CustomEndpoint) -> CustomEndpointOut:
 def add_endpoint(body: CustomEndpointCreate,
                  user: User = Depends(get_current_user),
                  db: Session = Depends(get_session)):
-    url = body.base_url.strip().rstrip("/")
-    if not (url.startswith("http://") or url.startswith("https://")):
-        raise HTTPException(422, "base_url must start with http(s)://")
+    url = check_outbound_url(body.base_url)  # SSRF: public https hosts only in production
     if body.kind not in ("openai-compatible", "ollama"):
         raise HTTPException(422, "kind must be openai-compatible or ollama")
     e = CustomEndpoint(user_id=user.id, name=body.name.strip()[:120] or url,
@@ -129,14 +128,16 @@ def delete_endpoint(endpoint_id: str, user: User = Depends(get_current_user),
 
 
 @router.post("/api/endpoints/test")
-def test_endpoint(body: CustomEndpointCreate,
+def test_endpoint(body: CustomEndpointCreate, request: Request,
                   user: User = Depends(get_current_user)):
-    """Ping any endpoint before saving — returns reachability, stores nothing."""
-    url = body.base_url.strip().rstrip("/")
+    """Ping an endpoint before saving — returns reachability, stores nothing."""
+    enforce(request, "endpoint-test", 10, 60, who=user.id)
+    url = check_outbound_url(body.base_url)
     probe = f"{url}/models" if body.kind == "openai-compatible" else f"{url}/api/tags"
     headers = {"Authorization": f"Bearer {body.api_key}"} if body.api_key else {}
     try:
-        r = httpx.get(probe, headers=headers, timeout=8)
+        # no redirects: a public host could otherwise bounce us to an internal address
+        r = httpx.get(probe, headers=headers, timeout=8, follow_redirects=False)
         return {"ok": r.status_code < 500, "status": r.status_code,
                 "hint": "reachable" if r.status_code < 500 else "server errored"}
     except httpx.ConnectError:

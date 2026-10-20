@@ -96,11 +96,26 @@ class Settings(BaseSettings):
     # CORS — comma-separated allowed origins; "*" allows all (dev only)
     allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    # Rate limiting — requests per minute per IP per endpoint
+    # Rate limiting — requests per minute per user (or IP) per endpoint; auth routes are
+    # stricter (see routers/auth.py). Off only for tests.
+    rate_limits_enabled: bool = True
     rate_limit_per_minute: int = 60
+
+    # Ingest guardrails: cloning is CPU/disk/network heavy
+    max_concurrent_ingests: int = 3       # across the whole instance; extra requests get 503
+    max_repo_mb: int = 500                # clone size cap (checked after clone, before indexing)
+    clone_timeout_seconds: int = 180
+
+    # LLM guardrails
+    llm_timeout_seconds: int = 90         # per model call; fallbacks each get their own
 
     # Request body size limit in bytes (default 1 MB)
     max_body_bytes: int = 1 * 1024 * 1024
+
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() == "production"
 
 
 settings = Settings()
@@ -108,17 +123,45 @@ settings = Settings()
 
 def production_problems(s: Settings) -> list[str]:
     """Settings that are fine on a laptop but unsafe on a public server."""
-    if s.environment.lower() != "production":
+    if not s.is_production:
         return []
     out = []
     if s.jwt_secret_key == "dev-only-change-me" or len(s.jwt_secret_key) < 32:
         out.append("JWT_SECRET_KEY must be a random value of at least 32 characters")
     if not s.encryption_key:
         out.append("ENCRYPTION_KEY must be set (Fernet key)")
-    if not s.database_url:
+    else:
+        try:
+            from cryptography.fernet import Fernet
+            Fernet(s.encryption_key.strip().encode())
+        except Exception:  # noqa: BLE001 — any parse failure means stored keys can't be read
+            out.append("ENCRYPTION_KEY is not a valid Fernet key (Fernet.generate_key())")
+        if s.encryption_key.strip() == s.jwt_secret_key.strip():
+            out.append("ENCRYPTION_KEY must differ from JWT_SECRET_KEY")
+    url = s.database_url.strip()
+    if not url or url.startswith("sqlite"):
         out.append("DATABASE_URL must point at Postgres (local SQLite is lost on redeploy)")
+    elif "sslmode=disable" in url and not any(h in url for h in ("@localhost", "@127.0.0.1", "@db:", "@db/")):
+        out.append("DATABASE_URL must not disable SSL for a remote database")
     if s.allow_local_ingest:
         out.append("ALLOW_LOCAL_INGEST must be false")
-    if "*" in s.allowed_origins:
+    origins = [o.strip() for o in s.allowed_origins.split(",") if o.strip()]
+    if not origins or "*" in origins:
         out.append("ALLOWED_ORIGINS must list real origins, not *")
+    elif any(not o.startswith("https://") for o in origins):
+        out.append("ALLOWED_ORIGINS must all be https:// in production")
+    if not s.rate_limits_enabled:
+        out.append("RATE_LIMITS_ENABLED must be true")
+    return out
+
+
+def production_warnings(s: Settings) -> list[str]:
+    """Not fatal, but a production server should not run like this."""
+    if not s.is_production:
+        return []
+    out = []
+    if not (s.smtp_host and s.smtp_user and s.smtp_password) and not s.google_client_id:
+        out.append("no SMTP and no GOOGLE_CLIENT_ID: only password sign-in will work")
+    if not s.aws_bearer_token_bedrock:
+        out.append("AWS_BEARER_TOKEN_BEDROCK unset: search falls back to keyword-only (TF-IDF)")
     return out

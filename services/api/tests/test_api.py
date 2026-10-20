@@ -80,7 +80,9 @@ def test_production_refuses_unsafe_settings():
     bad = Settings(environment="production", jwt_secret_key="dev-only-change-me", encryption_key="",
                    database_url="", allow_local_ingest=True, allowed_origins="*")
     assert len(production_problems(bad)) == 5
-    good = Settings(environment="production", jwt_secret_key="x" * 48, encryption_key="k",
+    from cryptography.fernet import Fernet
+    good = Settings(environment="production", jwt_secret_key="x" * 48,
+                    encryption_key=Fernet.generate_key().decode(),
                     database_url="postgresql+psycopg://u:p@h/db", allow_local_ingest=False,
                     allowed_origins="https://sherpa.example.com")
     assert production_problems(good) == []

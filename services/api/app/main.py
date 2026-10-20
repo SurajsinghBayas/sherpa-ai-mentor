@@ -1,15 +1,18 @@
 """Sherpa API — FastAPI routes. All answers cite file:line."""
 import logging
 import os
+import threading
 import time
+import uuid
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .agents.docs import (check_freshness, docs_markdown, generate_docs, get_docs,
@@ -18,11 +21,12 @@ from .agents.mentor import answer_question
 from .agents.overview import build_overview
 from .agents.tasks import suggest_starter_tasks
 from .agents.tour import build_tour
-from .config import production_problems, settings
-from .db import get_session, init_db
+from .config import production_problems, production_warnings, settings
+from .db import engine as _engine, get_session, init_db
+from .guards import check_branch, check_outbound_url, enforce, normalize_repo_url
 from .dbmodels import CustomEndpoint, ProviderKey, Repo, RepoArtifact, UsageCounter
 from .embeddings import embedder
-from .ingest import ingest_source, repo_id_for, snapshot_dir, _langs
+from .ingest import IngestError, ingest_source, repo_id_for, snapshot_dir, _langs
 from .llm import llm
 from .models import (AskRequest, DocsRequest, FreshnessRequest, IngestRequest,
                      OverviewRequest, SyncRequest, TaskRequest, TourRequest)
@@ -44,6 +48,8 @@ async def lifespan(_: FastAPI):
     problems = production_problems(settings)
     if problems:
         raise RuntimeError("unsafe production config: " + "; ".join(problems))
+    for w in production_warnings(settings):
+        log.warning("startup: %s", w)
     init_db()
     log.info("startup: env=%s db=%s llm_provider=%s model=%s fallbacks=%s llm_available=%s "
              "embeddings=%s local_ingest=%s", settings.environment,
@@ -56,8 +62,11 @@ async def lifespan(_: FastAPI):
     yield
 
 
+# interactive API docs are a dev tool; production doesn't publish its schema
+_dev = not settings.is_production
 app = FastAPI(title="Sherpa — AI Codebase Mentor", version="1.0.0", lifespan=lifespan,
-              docs_url="/api/docs", redoc_url="/api/redoc")
+              docs_url="/api/docs" if _dev else None, redoc_url="/api/redoc" if _dev else None,
+              openapi_url="/openapi.json" if _dev else None)
 
 # ── CORS ────────────────────────────────────────────────────────────────────
 ALLOWED_ORIGINS: list[str] = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
@@ -76,39 +85,79 @@ app.include_router(study_router.router)
 
 # ── In-memory repo store cache (LRU; reloaded when the DB version moves on) ────
 _stores: "OrderedDict[str, RepoStore]" = OrderedDict()
+_stores_lock = threading.Lock()  # sync routes run on a thread pool
 MAX_CACHED_STORES = 16
 
 
 def _remember(store: RepoStore) -> None:
-    _stores[store.repo_id] = store
-    _stores.move_to_end(store.repo_id)
-    while len(_stores) > MAX_CACHED_STORES:
-        _stores.popitem(last=False)
-
-# ── Simple in-process rate limiter ───────────────────────────────────────────
-# Tracks (ip, endpoint) request counts per minute. Production deployments should
-# replace this with Redis-backed slowapi or a gateway-level rate limiter.
-_rate_counts: dict[str, tuple[int, float]] = {}
+    with _stores_lock:
+        _stores[store.repo_id] = store
+        _stores.move_to_end(store.repo_id)
+        while len(_stores) > MAX_CACHED_STORES:
+            _stores.popitem(last=False)
 
 
 def _check_rate(request: Request, key: str, user=None) -> None:
-    ip = request.client.host if request.client else "unknown"
-    bucket = f"{user.id if user else ip}:{key}"
-    now = time.time()
-    count, window_start = _rate_counts.get(bucket, (0, now))
-    if now - window_start > 60:
-        count, window_start = 0, now
-    count += 1
-    _rate_counts[bucket] = (count, window_start)
-    if count > settings.rate_limit_per_minute:
-        log.warning("rate limit hit ip=%s endpoint=%s", ip, key)
-        raise HTTPException(429, "rate limit exceeded — slow down")
+    """Per-user (else per-IP) limit of RATE_LIMIT_PER_MINUTE on one endpoint."""
+    enforce(request, key, settings.rate_limit_per_minute, 60, who=user.id if user else None)
+
+
+# ── Ingest concurrency: clones are heavy, so cap them per instance and per user ──
+_ingest_slots = threading.BoundedSemaphore(max(1, settings.max_concurrent_ingests))
+_ingesting: set[str] = set()
+_ingesting_lock = threading.Lock()
+
+
+class _IngestSlot:
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+
+    def __enter__(self):
+        with _ingesting_lock:
+            if self.user_id in _ingesting:
+                raise HTTPException(409, "you already have an import running; wait for it to finish")
+            _ingesting.add(self.user_id)
+        if not _ingest_slots.acquire(timeout=5):
+            with _ingesting_lock:
+                _ingesting.discard(self.user_id)
+            raise HTTPException(503, "the server is busy importing other repositories; try again in a minute",
+                                headers={"Retry-After": "30"})
+        return self
+
+    def __exit__(self, *_):
+        _ingest_slots.release()
+        with _ingesting_lock:
+            _ingesting.discard(self.user_id)
+
+
+# ── Request id, access log, and a last-resort error handler ─────────────────────
+access_log = logging.getLogger("app.access")
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    rid = request.headers.get("x-request-id", "")[:64] or uuid.uuid4().hex[:16]
+    t0 = time.perf_counter()
+    try:
+        response: Response = await call_next(request)
+    except Exception:  # noqa: BLE001 — never leak a traceback to the client
+        log.exception("unhandled error rid=%s %s %s", rid, request.method, request.url.path)
+        response = JSONResponse({"detail": "internal error; please try again", "request_id": rid},
+                                status_code=500)
+    ms = (time.perf_counter() - t0) * 1000
+    if request.url.path not in ("/health", "/ready"):
+        access_log.info("%s %s %d %.0fms rid=%s", request.method, request.url.path,
+                        response.status_code, ms, rid)
+    response.headers["X-Request-ID"] = rid
+    return response
 
 
 # ── Security headers middleware ───────────────────────────────────────────────
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response: Response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")  # responses carry private code
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -119,14 +168,53 @@ async def security_headers(request: Request, call_next):
 
 
 # ── Request size guard ────────────────────────────────────────────────────────
-@app.middleware("http")
-async def limit_body_size(request: Request, call_next):
-    if request.method in ("POST", "PUT", "PATCH"):
-        content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > settings.max_body_bytes:
-            # HTTPException raised in middleware bypasses FastAPI's handlers (→ 500)
-            return JSONResponse({"detail": "request body too large"}, status_code=413)
-    return await call_next(request)
+class BodyLimit:
+    """Reject bodies over MAX_BODY_BYTES, including chunked uploads with no Content-Length."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        limit = settings.max_body_bytes
+        declared = dict(scope.get("headers") or []).get(b"content-length")
+        if declared is not None:
+            try:
+                too_big = int(declared) > limit
+            except ValueError:
+                return await JSONResponse({"detail": "bad Content-Length"}, status_code=400)(scope, receive, send)
+            if too_big:
+                return await JSONResponse({"detail": "request body too large"}, status_code=413)(scope, receive, send)
+        seen, exceeded, started = 0, False, False
+
+        async def limited():
+            nonlocal seen, exceeded
+            msg = await receive()
+            if msg["type"] == "http.request":
+                seen += len(msg.get("body", b""))
+                if seen > limit:  # stop reading; the app sees a disconnect
+                    exceeded = True
+                    return {"type": "http.disconnect"}
+            return msg
+
+        async def guarded_send(msg):
+            nonlocal started
+            if exceeded and not started:
+                return  # drop the app's own error reply; the 413 below replaces it
+            started = started or msg["type"] == "http.response.start"
+            await send(msg)
+
+        try:
+            await self.app(scope, limited, guarded_send)
+        except Exception:
+            if not exceeded:
+                raise
+        if exceeded and not started:
+            await JSONResponse({"detail": "request body too large"}, status_code=413)(scope, receive, send)
+
+
+app.add_middleware(BodyLimit)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -137,28 +225,43 @@ def get_store(repo_id: str, user, db: Session) -> RepoStore:
     row = db.get(Repo, repo_id)
     if row is None or row.owner_id != user.id:  # never reveal other users' repos
         raise HTTPException(404, f"unknown repo_id {repo_id!r}; POST /api/ingest first")
-    cached = _stores.get(repo_id)
-    if cached is not None and cached.version == row.version:
-        _stores.move_to_end(repo_id)
-        return cached
+    with _stores_lock:
+        cached = _stores.get(repo_id)
+        if cached is not None and cached.version == row.version:
+            _stores.move_to_end(repo_id)
+            return cached
     s = RepoStore(repo_id, SqlBackend(repo_id, user.id))
     _remember(s)
     return s
 
 
 def _charge(db: Session, user, kind: str) -> None:
-    """Count one unit of a daily quota (llm | ingest); 429 once it is used up."""
+    """Count one unit of a daily quota (llm | ingest); 429 once it is used up.
+
+    The counter row is locked (Postgres) so parallel requests can't both take the last unit.
+    """
     limit = settings.daily_llm_requests if kind == "llm" else settings.daily_ingests
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    row = db.get(UsageCounter, (user.id, day, kind))
-    if row is None:
-        row = UsageCounter(user_id=user.id, day=day, kind=kind, count=0)
-        db.add(row)
-    if row.count >= limit:
-        log.warning("quota: user=%s used all %d %s requests today", user.id, limit, kind)
-        raise HTTPException(429, f"daily {kind} limit reached ({limit}); try again tomorrow")
-    row.count += 1
-    db.commit()
+    key = (user.id, day, kind)
+    for attempt in range(2):
+        row = db.query(UsageCounter).filter_by(user_id=user.id, day=day, kind=kind) \
+            .with_for_update().one_or_none()
+        if row is None:
+            row = UsageCounter(user_id=user.id, day=day, kind=kind, count=0)
+            db.add(row)
+        if row.count >= limit:
+            db.rollback()
+            log.warning("quota: user=%s used all %d %s requests today", user.id, limit, kind)
+            raise HTTPException(429, f"daily {kind} limit reached ({limit}); try again tomorrow")
+        row.count += 1
+        try:
+            db.commit()
+            return
+        except IntegrityError:  # another request created today's row first; count again
+            db.rollback()
+            if attempt:
+                raise
+    raise HTTPException(500, f"could not record usage for {key}")
 
 
 def _resolve_llm(key_id: str | None, endpoint_id: str | None, user, db: Session) -> dict:
@@ -178,26 +281,23 @@ def _resolve_llm(key_id: str | None, endpoint_id: str | None, user, db: Session)
                                             CustomEndpoint.user_id == user.id).first()
         if not e:
             raise HTTPException(404, "endpoint not found")
+        # re-checked at use time: DNS for a saved host can change after it was added
         return {"provider": "ollama" if e.kind == "ollama" else "openai", "model": e.model,
-                "base_url": e.base_url,
+                "base_url": check_outbound_url(e.base_url),
                 "api_key": decrypt_secret(e.api_key_enc) if e.api_key_enc else "not-needed"}
     return {}
 
 
-def _validate_source(req: IngestRequest) -> None:
-    if not req.repo_url and not req.local_path:
+def _validate_source(req: IngestRequest) -> IngestRequest:
+    """Normalised copy of the request; public code hosts only (SSRF guard), safe branch name."""
+    if req.repo_url and req.repo_url.strip():
+        return IngestRequest(repo_url=normalize_repo_url(req.repo_url), local_path=None,
+                             branch=check_branch(req.branch))
+    if not req.local_path:
         raise HTTPException(422, "provide repo_url or local_path")
-    if req.repo_url:
-        parsed = urlparse(req.repo_url.strip())
-        if parsed.scheme != "https":
-            raise HTTPException(422, "repo_url must be an https:// URL")
-        host = (parsed.hostname or "").lower()
-        # SSRF guard: public code hosts only (exact host or subdomain)
-        if not any(host == h or host.endswith("." + h)
-                   for h in ("github.com", "gitlab.com", "bitbucket.org")):
-            raise HTTPException(422, "only github.com, gitlab.com, and bitbucket.org are supported")
-    elif not settings.allow_local_ingest:
+    if not settings.allow_local_ingest:
         raise HTTPException(403, "local_path ingest is disabled (set ALLOW_LOCAL_INGEST=true for local dev)")
+    return req
 
 
 def _diff(old: dict, new: dict) -> dict:
@@ -209,11 +309,15 @@ def _diff(old: dict, new: dict) -> dict:
 def _index(repo_url: str | None, local_path: str | None, branch: str, user,
            db: Session) -> tuple[RepoStore, dict]:
     """Ingest a source into the caller's account; if indexed before, report what changed."""
-    try:
-        _, chunks, meta, sources = ingest_source(repo_url, local_path, branch)
-    except Exception as e:  # noqa: BLE001 — surface clone/walk errors to the caller
-        log.warning("ingest failed source=%s: %s: %s", repo_url or local_path, type(e).__name__, e)
-        raise HTTPException(400, f"ingest failed: {str(e)[:300]}")
+    with _IngestSlot(user.id):
+        try:
+            _, chunks, meta, sources = ingest_source(repo_url, local_path, branch)
+        except (IngestError, ValueError) as e:  # messages written for the user
+            log.warning("ingest failed source=%s: %s", repo_url or local_path, e)
+            raise HTTPException(400, f"ingest failed: {str(e)[:300]}")
+        except Exception:  # noqa: BLE001 — unexpected: log it, don't leak internals
+            log.exception("ingest crashed source=%s", repo_url or local_path)
+            raise HTTPException(500, "ingest failed unexpectedly; please try again")
     return _save_snapshot(repo_id_for(f"{user.id}:{meta['source']}"), chunks, meta, sources, user, db)
 
 
@@ -263,6 +367,18 @@ def health():
             "local_ingest": settings.allow_local_ingest}
 
 
+@app.get("/ready")
+def ready():
+    """Readiness for the load balancer: 503 until the database answers."""
+    try:
+        with _engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as e:  # noqa: BLE001
+        log.error("ready: database unreachable: %s", type(e).__name__)
+        return JSONResponse({"ok": False, "db": "unreachable"}, status_code=503)
+    return {"ok": True}
+
+
 @app.get("/api/repos")
 def repos(user=Depends(get_current_user), db: Session = Depends(get_session)):
     rows = db.query(Repo).filter(Repo.owner_id == user.id).order_by(Repo.indexed_at.desc()).all()
@@ -278,16 +394,17 @@ def delete_repo(repo_id: str, user=Depends(get_current_user), db: Session = Depe
         raise HTTPException(404, "repo not found")
     db.delete(row)  # files, chunks and artifacts cascade; shared embeddings are kept
     db.commit()
-    _stores.pop(repo_id, None)
+    with _stores_lock:
+        _stores.pop(repo_id, None)
 
 
 @app.post("/api/ingest")
 def ingest(req: IngestRequest, request: Request, user=Depends(get_current_user),
            db: Session = Depends(get_session)):
     _check_rate(request, "ingest", user)
-    _validate_source(req)
+    req = _validate_source(req)
     _charge(db, user, "ingest")
-    store, changes = _index(req.repo_url and req.repo_url.strip(), req.local_path, req.branch, user, db)
+    store, changes = _index(req.repo_url, req.local_path, req.branch, user, db)
     return {**_repo_summary(store, db), "changes": changes}
 
 
@@ -303,7 +420,7 @@ def sync(req: SyncRequest, request: Request, user=Depends(get_current_user),
     ir = IngestRequest(repo_url=src if kind != "local" and src.startswith("http") else None,
                        local_path=src if kind == "local" or not src.startswith("http") else None,
                        branch=old.meta.get("branch", ""))
-    _validate_source(ir)
+    ir = _validate_source(ir)
     _charge(db, user, "ingest")
     store, changes = _index(ir.repo_url, ir.local_path, ir.branch, user, db)
     changed = changes.get("modified", []) + changes.get("removed", []) + changes.get("added", [])
@@ -325,7 +442,8 @@ def ingest_self(request: Request, user=Depends(get_current_user), db: Session = 
     if not settings.allow_local_ingest:
         raise HTTPException(403, "ingest-self is disabled (set ALLOW_LOCAL_INGEST=true for local dev)")
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
-    chunks, roles, sources = snapshot_dir(root)
+    with _IngestSlot(user.id):
+        chunks, roles, sources = snapshot_dir(root)
     meta = {"source": "self", "name": "sherpa-ai-mentor (this app)", "kind": "self",
             "indexed_at": time.time(), "roles": roles, "languages": _langs(roles)}
     store, _ = _save_snapshot(repo_id_for(f"{user.id}:sherpa-self"), chunks, meta, sources, user, db)

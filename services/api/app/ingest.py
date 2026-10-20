@@ -64,13 +64,18 @@ def _walk(root: str) -> List[str]:
     out = []
     # never index Sherpa's own snapshot store (chunks.json / sherpa.db)
     data_dir = os.path.realpath(settings.data_dir)
-    for dirpath, dirnames, filenames in os.walk(root):
+    real_root = os.path.realpath(root)
+    for dirpath, dirnames, filenames in os.walk(root):  # does not descend into symlinked dirs
         dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS
                        and os.path.realpath(os.path.join(dirpath, d)) != data_dir]
         for fn in filenames:
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, root)
             if not _should_keep(rel):
+                continue
+            # a repo can ship `x -> /proc/self/environ` or `../../etc/passwd`: never read
+            # through a symlink, and never outside the checkout
+            if os.path.islink(full) or not os.path.realpath(full).startswith(real_root + os.sep):
                 continue
             try:
                 if os.path.getsize(full) > MAX_FILE_BYTES:
@@ -87,15 +92,64 @@ def _walk(root: str) -> List[str]:
     return sorted(out)
 
 
+class IngestError(ValueError):
+    """A clone/index failure whose message is safe to show the user."""
+
+
+# Git must never prompt, run user hooks, follow non-https transports, or pull LFS blobs.
+_GIT_ENV = {"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "/bin/true", "SSH_ASKPASS": "/bin/true",
+            "GIT_LFS_SKIP_SMUDGE": "1", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
+_GIT_SAFE = ["-c", "protocol.allow=never", "-c", "protocol.https.allow=always",
+             "-c", "core.hooksPath=" + os.devnull, "-c", "credential.helper=",
+             "-c", "http.followRedirects=initial"]
+
+
+def _dir_bytes(root: str) -> int:
+    total = 0
+    for dirpath, _, filenames in os.walk(root):
+        for fn in filenames:
+            try:
+                total += os.lstat(os.path.join(dirpath, fn)).st_size
+            except OSError:
+                pass
+    return total
+
+
+def _git_error(stderr: str) -> str:
+    s = (stderr or "").lower()
+    if "remote branch" in s and "not found" in s:
+        return "branch not found"
+    if "not found" in s or "could not read username" in s or "authentication" in s:
+        return "repository not found, or it is private (only public repositories are supported)"
+    if "could not resolve host" in s or "unable to access" in s:
+        return "couldn't reach the git host; try again shortly"
+    return "git clone failed"
+
+
 def _clone(url: str, branch: str) -> str:
+    """Shallow, hardened clone into a fresh temp dir. The dir is removed on any failure."""
     tmp = tempfile.mkdtemp(prefix="sherpa-")
     dest = os.path.join(tmp, "repo")
-    cmd = ["git", "clone", "--depth", "1"]
+    cmd = ["git", *_GIT_SAFE, "clone", "--depth", "1", "--single-branch", "--no-tags",
+           "--no-recurse-submodules"]
     if branch:
         cmd += ["--branch", branch]
-    cmd += [url, dest]
-    subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=180)
-    return dest
+    cmd += ["--", url, dest]
+    try:
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True,
+                           timeout=settings.clone_timeout_seconds, env={**os.environ, **_GIT_ENV})
+        except subprocess.TimeoutExpired:
+            raise IngestError(f"clone took longer than {settings.clone_timeout_seconds}s; "
+                              "the repository is too large")
+        size = _dir_bytes(dest)
+        if size > settings.max_repo_mb * 1024 * 1024:
+            raise IngestError(f"repository is {size // (1024 * 1024)} MB; the limit is "
+                              f"{settings.max_repo_mb} MB")
+        return dest
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
 
 
 IMPORT_RE = re.compile(r"^\s*(?:import|from|require\(|export .* from)", re.M)
@@ -154,12 +208,15 @@ def ingest_source(repo_url: str | None, local_path: str | None,
         try:
             root = _clone(repo_url, branch)
         except subprocess.CalledProcessError as e:
-            if not branch:
-                raise
+            if not branch or "not found" not in (e.stderr or "").lower():
+                raise IngestError(_git_error(e.stderr)) from e
             # many repos use master/trunk — retry on the default branch, and say so
             log.warning("ingest: branch %r not found for %s (%s); cloning default branch",
                         branch, repo_url, (e.stderr or "").strip()[:160])
-            root = _clone(repo_url, "")
+            try:
+                root = _clone(repo_url, "")
+            except subprocess.CalledProcessError as e2:
+                raise IngestError(_git_error(e2.stderr)) from e2
             branch = ""
         cleanup = os.path.dirname(root)
         source = repo_url
@@ -183,7 +240,7 @@ def ingest_source(repo_url: str | None, local_path: str | None,
         if cleanup and os.path.isdir(cleanup):
             shutil.rmtree(cleanup, ignore_errors=True)
     if not chunks:
-        raise ValueError("no readable source files found in the repository")
+        raise IngestError("no readable source files found in the repository")
 
     name = repo_name(source) if repo_url else os.path.basename(root.rstrip("/"))
     meta = {"source": source, "name": name, "branch": branch,

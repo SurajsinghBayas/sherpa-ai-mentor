@@ -96,7 +96,7 @@ Full stack in Docker: `docker compose up --build` (api :8000, web :3000, Postgre
 ## Deploying
 
 - **Database:** AWS RDS for PostgreSQL (15.2+ has pgvector; ours is 18.3). Migrations run on API startup and enable the extension. See [`docs/rds_setup.md`](docs/rds_setup.md).
-- **API:** any container host (Railway, Render, Fly, App Runner) using `services/api/Dockerfile`. It listens on `$PORT`. Set `ENVIRONMENT=production`; the API then refuses to start with a weak `JWT_SECRET_KEY`, no `ENCRYPTION_KEY`, no `DATABASE_URL`, `ALLOW_LOCAL_INGEST=true` or `ALLOWED_ORIGINS=*`.
+- **API:** any container host (Railway, Render, Fly, App Runner) using `services/api/Dockerfile`. It listens on `$PORT`. Set `ENVIRONMENT=production`; the API then refuses to start with a weak `JWT_SECRET_KEY`, a missing or invalid `ENCRYPTION_KEY`, SQLite or SSL-disabled `DATABASE_URL`, `ALLOW_LOCAL_INGEST=true`, or non-https `ALLOWED_ORIGINS`. Point the load balancer's health check at `GET /ready` (503 until the database answers); `/health` is liveness.
 - **Web:** Vercel (root `apps/web`) or `apps/web/Dockerfile`. Set `NEXT_PUBLIC_API_URL` to the API's URL at build time, and add the web origin to the API's `ALLOWED_ORIGINS`.
 - **Secrets** (`OPENAI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`, `JWT_SECRET_KEY`, `ENCRYPTION_KEY`, `DATABASE_URL`) go in the host's secret settings, never in the repo.
 
@@ -122,6 +122,19 @@ Every `/api/*` route except sign-up/login and the study protocol needs a signed-
 | `POST` | `/api/auth/google` | Sign in or sign up with a Google ID token |
 | `*` | `/api/auth/*`, `/api/keys`, `/api/endpoints` | Password accounts, auth config, and bring-your-own LLM credentials (Fernet-encrypted) |
 
+## Production guardrails
+
+| Risk | Guardrail |
+|---|---|
+| Unsafe config | `ENVIRONMENT=production` refuses to start on weak/invalid secrets, SQLite, SSL off, `*` or http origins, local ingest on; warns when no email/Google sign-in or no embeddings |
+| Password guessing, sign-up spam, mail-bombing via our Gmail | Per-IP limits on every `/api/auth/*` route (login 10/min + 20 per account per 15 min, codes 5/min and 20/hour, sign-up 5/min), plus the per-email code throttle; 429 with `Retry-After` |
+| API abuse and cost | Per-user rate limit per endpoint, daily LLM/ingest quotas (row-locked so parallel calls can't overshoot), repo cap, 1 MB body limit (chunked uploads too), question/flow length caps, `LLM_TIMEOUT_SECONDS` per model call |
+| SSRF | Repo URLs: https on GitHub/GitLab/Bitbucket only, normalised, no credentials/ports/odd paths, branch names can't become git options. Custom LLM endpoints: in production https and public IPs only (checked on save, on test and on every use), no redirects |
+| Malicious repositories | Hardened clone (no prompts, hooks, submodules, LFS or non-https transports; size and time caps; temp dir always removed); symlinks are never followed, so a repo can't make the API read server files; secrets, keys and databases are never indexed |
+| Overload | At most `MAX_CONCURRENT_INGESTS` clones per instance (503 "busy") and one per user (409) |
+| Prompt injection | Repository text is treated as untrusted data in the system prompt; answers keep only citations that verify against the indexed code |
+| Data exposure | Owner-scoped repos (others get 404), `Cache-Control: no-store` on `/api/*`, API docs hidden in production, security headers on API and web, no tracebacks to clients (500s carry an `X-Request-ID` that matches the server log), email codes never logged in production |
+
 ## Configuration
 
 | Variable | Default | Notes |
@@ -141,13 +154,18 @@ Every `/api/*` route except sign-up/login and the study protocol needs a signed-
 | `ENCRYPTION_KEY` | derived | Fernet key for stored user API keys |
 | `ALLOW_LOCAL_INGEST` | `false` | Lets the API read server folders; local dev only |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | CORS |
+| `RATE_LIMIT_PER_MINUTE` / `MAX_BODY_BYTES` | 60 / 1 MB | Per user per endpoint · request size |
+| `MAX_CONCURRENT_INGESTS` / `MAX_REPO_MB` / `CLONE_TIMEOUT_SECONDS` | 3 / 500 / 180 | Ingest limits |
+| `LLM_TIMEOUT_SECONDS` | 90 | Per model call |
 | `LOG_LEVEL` | `INFO` | Fallbacks log at `WARNING` |
 
 ## Project layout
 
 ```
 services/api/app/
-  main.py            routes, middleware (CORS, rate limit, body limit, security headers)
+  main.py            routes, middleware (CORS, request id, body limit, security headers), ingest slots
+  guards.py          rate limiter, SSRF checks for outbound URLs, git URL/branch validation
+  prompts/system.md  mentor system prompt (persona, grounding and safety rules)
   llm.py             LLM client: default model + fallback chain + BYOK, JSON parsing
   ingest.py          clone/walk, secret & binary filtering, snapshot metadata
   chunk.py           provenance-preserving chunker
@@ -169,7 +187,7 @@ evals/               golden questions, eval runner, results, study protocol
 
 ## Tests
 
-`make test` runs 34 backend tests: citation verification, import graph, living-docs staleness, LLM fallback chain, ingest safety, repo ownership, quotas, migrations, email codes, Google sign-in, tour call-following, production config checks, study API. They run offline and never call a paid model. `make eval` runs the live grounding eval. CI also builds the web app.
+`make test` runs 49 backend tests: citation verification, import graph, living-docs staleness, LLM fallback chain, ingest safety, repo ownership, quotas, migrations, email codes, Google sign-in, tour call-following, production config checks, study API, and the production guardrails (SSRF, symlinks, git URL/branch validation, rate limits, ingest slots, body limits). They run offline and never call a paid model. `make eval` runs the live grounding eval. CI also builds the web app.
 
 ## Tools, models and credits
 

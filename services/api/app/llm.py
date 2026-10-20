@@ -9,7 +9,7 @@ import logging
 import os
 import re
 
-from .config import load_local_env
+from .config import load_local_env, settings
 
 load_local_env()
 
@@ -119,7 +119,8 @@ class LLMClient:
             if not key:
                 raise LLMError(f"no API key for provider {prov}")
             # pin base_url: the SDK otherwise silently reads OPENAI_BASE_URL itself
-            client = OpenAI(api_key=key, base_url=base or OPENAI_DEFAULT_BASE, timeout=90)
+            client = OpenAI(api_key=key, base_url=base or OPENAI_DEFAULT_BASE,
+                            timeout=settings.llm_timeout_seconds, max_retries=1)
             if byok or base_url or prov != "openai" or not os.getenv("OPENAI_PROJECT_ID"):
                 client.project = None  # SDK defaults this from OPENAI_PROJECT_ID
             extra: dict = {}
@@ -135,7 +136,8 @@ class LLMClient:
             key = api_key or os.getenv("ANTHROPIC_API_KEY")
             if not key:
                 raise LLMError("no API key for anthropic")
-            m = anthropic.Anthropic(api_key=key).messages.create(
+            m = anthropic.Anthropic(api_key=key, timeout=settings.llm_timeout_seconds,
+                                      max_retries=1).messages.create(
                 model=mdl, max_tokens=max_tokens, system=system,
                 messages=[{"role": "user", "content": user}])
             return "".join(b.text for b in m.content if getattr(b, "type", "") == "text")
@@ -144,14 +146,15 @@ class LLMClient:
             base = (base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
             if base.endswith("/v1"):  # OpenAI-compatible gateway, not native Ollama
                 from openai import OpenAI
-                client = OpenAI(api_key=api_key or "not-needed", base_url=base, timeout=90)
+                client = OpenAI(api_key=api_key or "not-needed", base_url=base,
+                                timeout=settings.llm_timeout_seconds, max_retries=1)
                 client.project = None
                 r = client.chat.completions.create(model=mdl, messages=messages,
                                                    temperature=0.2, max_tokens=max_tokens)
                 return r.choices[0].message.content or ""
             r = httpx.post(f"{base}/api/chat", json={
                 "model": mdl, "messages": messages, "stream": False,
-                **({"format": "json"} if json_mode else {})}, timeout=120)
+                **({"format": "json"} if json_mode else {})}, timeout=settings.llm_timeout_seconds)
             r.raise_for_status()
             return r.json().get("message", {}).get("content", "")
         raise LLMError(f"unsupported provider {prov!r}")

@@ -17,14 +17,10 @@ log = logging.getLogger(__name__)
 CITE_RE = re.compile(r"\[([^\[\]\s:]+?(?:\.[A-Za-z0-9]+|/[^\[\]\s:]+|[A-Za-z0-9_-]+)):L?(\d+)(?:\s*[-–]\s*L?(\d+))?\]")
 MAX_CITED_SPAN = 400
 
-_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "../../../../packages/core/prompts/system.md")
-try:
-    with open(_PROMPT_PATH) as _f:
-        SYSTEM_PROMPT = _f.read()
-except OSError:
-    log.warning("packages/core/prompts/system.md not found; using built-in fallback system prompt")
-    SYSTEM_PROMPT = ("You are Sherpa, a senior-engineer mentor. Cite every claim as "
-                     "[path/to/file:START-END] using only paths and lines from the context.")
+# shipped inside the app package so the Docker image always has it (a missing prompt is a bug)
+_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompts", "system.md")
+with open(_PROMPT_PATH) as _f:
+    SYSTEM_PROMPT = _f.read()
 
 
 def ref(file: str, start: int, end: int) -> str:
