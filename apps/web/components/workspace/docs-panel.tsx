@@ -71,9 +71,10 @@ export function DocsPanel({
 
   if (!doc) {
     return (
-      <div className="custom-scroll flex-1 overflow-y-auto p-6">
+      <div className="scroll-thin flex-1 overflow-y-auto p-6">
         <EmptyState
           busy={busy === "docs"}
+          pose="explaining"
           title="Living onboarding docs"
           body="Generate an onboarding guide from the code. Each section remembers which files it cites, so when the code changes Sherpa flags and rewrites only the sections that went stale."
         >
@@ -88,16 +89,16 @@ export function DocsPanel({
 
   const ch = lastSync?.changes;
   return (
-    <div className="custom-scroll flex-1 overflow-y-auto p-4 sm:p-6">
+    <div className="scroll-thin flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="mr-auto text-lg font-semibold">Onboarding guide</h2>
           {doc.fresh ? (
-            <Badge variant="success" className="text-[10px]">
+            <Badge variant="success">
               <CheckCircle2 /> in sync with code
             </Badge>
           ) : (
-            <Badge variant="warning" className="text-[10px]">
+            <Badge variant="warning">
               <TriangleAlert /> {doc.stale_count} stale section{doc.stale_count === 1 ? "" : "s"}
             </Badge>
           )}
@@ -135,7 +136,7 @@ export function DocsPanel({
                 </div>
               )}
               {lastSync!.docs_refreshed.length > 0 && (
-                <p className="mt-2 text-emerald-600 dark:text-emerald-400">
+                <p className="mt-2 text-success">
                   Rewrote: {lastSync!.docs_refreshed.join(", ")}
                 </p>
               )}
@@ -148,18 +149,18 @@ export function DocsPanel({
             <section
               className={cn(
                 "rounded-xl border bg-card p-5",
-                s.stale ? "border-amber-500/40" : "border-border"
+                s.stale ? "border-warning/40" : "border-border"
               )}
             >
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <h3 className="mr-auto text-base font-semibold">{s.title}</h3>
                 {s.stale && (
-                  <Badge variant="warning" className="text-[10px]" title={s.changed_files.join("\n")}>
+                  <Badge variant="warning" title={s.changed_files.join("\n")}>
                     <TriangleAlert /> code changed: {s.changed_files.slice(0, 2).map((f) => f.split("/").pop()).join(", ")}
                     {s.changed_files.length > 2 ? ` +${s.changed_files.length - 2}` : ""}
                   </Badge>
                 )}
-                <span className="text-[10px] text-muted-foreground">updated {timeAgo(s.updated_at)}</span>
+                <span className="text-[11px] text-muted-foreground">updated {timeAgo(s.updated_at)}</span>
                 <ModeBadge mode={s.mode} />
               </div>
               <Markdown text={s.markdown} />

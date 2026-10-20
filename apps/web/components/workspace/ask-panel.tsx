@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { api, ApiError, type AskResponse } from "../../lib/api";
 import { CitationChip } from "../code-viewer";
 import { Markdown } from "../markdown";
-import { SherpaAvatar, TypingIndicator } from "../sherpa-orb";
+import { Sherpa, SherpaAvatar, SherpaSays } from "../sherpa";
 import { Button, Textarea } from "../ui/primitives";
 import { cn } from "../../lib/utils";
 import { ease, ModeBadge, VerifiedBadge } from "./shared";
@@ -38,7 +38,8 @@ function Sources({ meta }: { meta: AskResponse }) {
         <ModeBadge mode={meta.mode} model={meta.model} />
         <button
           onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          aria-expanded={open}
+          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
         >
           {open ? "Hide" : "Show"} sources
           <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
@@ -55,23 +56,21 @@ function Sources({ meta }: { meta: AskResponse }) {
   );
 }
 
-function Bubble({ msg, isLast }: { msg: ChatMessage; isLast: boolean }) {
+function Bubble({ msg }: { msg: ChatMessage }) {
   const user = msg.role === "user";
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease }}
+      transition={{ duration: 0.22, ease }}
       className={cn("flex gap-3", user ? "justify-end" : "justify-start")}
     >
-      {!user && <SherpaAvatar state={isLast ? "responding" : "idle"} className="mt-1 shrink-0" />}
+      {!user && <SherpaAvatar className="mt-0.5" />}
       <div className={cn("min-w-0", user ? "max-w-[80%]" : "max-w-[min(100%,46rem)] flex-1")}>
         <div
           className={cn(
-            "rounded-2xl px-4 py-3 text-sm",
-            user
-              ? "rounded-tr-sm bg-primary text-primary-foreground"
-              : "rounded-tl-sm border border-border bg-card"
+            "text-sm",
+            user ? "rounded-lg bg-foreground px-3.5 py-2.5 text-background" : "pt-1 leading-relaxed"
           )}
         >
           {user ? <p className="whitespace-pre-wrap">{msg.text}</p> : <Markdown text={msg.text} />}
@@ -125,7 +124,7 @@ export function AskPanel({
       toast.error(e instanceof ApiError ? e.message : "Request failed");
       setMessages((prev) => [
         ...prev,
-        { id: uid(), role: "sherpa", text: "Sorry — I couldn't answer that. The error was shown above; please try again." },
+        { id: uid(), role: "sherpa", text: "Sorry, I couldn't answer that. The error is shown in the corner; please try again." },
       ]);
     } finally {
       setThinking(false);
@@ -134,52 +133,59 @@ export function AskPanel({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="custom-scroll flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
+      <div className="scroll-thin flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
         {messages.length === 0 && (
-          <div className="mx-auto max-w-2xl py-8 text-center">
-            <SherpaAvatar state="idle" className="mx-auto" />
-            <h3 className="mt-4 font-semibold">
-              {repoId ? `Ask anything about ${repoName}` : "Index a repository to start"}
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Every answer cites the exact files and lines it's based on — click a citation to check it.
-            </p>
+          <div className="mx-auto max-w-2xl py-6">
+            <SherpaSays pose="explaining" size={80} className="max-w-lg">
+              {repoId ? (
+                <>
+                  Ask me anything about <span className="font-semibold">{repoName}</span>. I&apos;ll answer from the code and
+                  show the exact files and lines, so you can check me.
+                </>
+              ) : (
+                "Add a repository first, then ask me how anything in it works."
+              )}
+            </SherpaSays>
             {repoId && (
-              <div className="mt-6 grid gap-2 sm:grid-cols-2">
-                {STARTERS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => send(s)}
-                    className="rounded-xl border border-border bg-card px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+              <>
+                <p className="eyebrow mb-2 mt-8">Try asking</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {STARTERS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => send(s)}
+                      className="rounded-lg border border-border bg-card px-3.5 py-3 text-left text-sm text-muted-foreground shadow-card transition-[color,border-color,transform] duration-150 hover:border-input hover:text-foreground active:scale-[0.99]"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}
-        {messages.map((m, i) => (
-          <Bubble key={m.id} msg={m} isLast={i === messages.length - 1 && !thinking} />
+        {messages.map((m) => (
+          <Bubble key={m.id} msg={m} />
         ))}
         {thinking && (
-          <div className="flex items-start gap-3">
-            <SherpaAvatar state="thinking" className="mt-1 shrink-0" />
-            <TypingIndicator />
+          <div className="flex items-center gap-3" role="status">
+            <Sherpa pose="thinking" size={48} decorative className="-my-2 -ml-2" />
+            <span className="text-sm text-muted-foreground">Reading the code…</span>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t border-border bg-card/60 p-3 sm:p-4">
-        <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-border bg-background px-3 py-2 transition-shadow focus-within:ring-2 focus-within:ring-ring">
+      <div className="pb-safe border-t border-border bg-background p-3 sm:p-4">
+        <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-input bg-card px-3 py-2 shadow-card transition-[border-color,box-shadow] duration-150 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20">
           <Textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={repoId ? "Ask how or why something works…" : "Index a repo to start asking questions"}
             rows={1}
-            className="max-h-[140px] min-h-[20px] flex-1 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+            aria-label="Your question"
+            className="max-h-[140px] min-h-[20px] flex-1 resize-none border-0 bg-transparent p-0 py-1 text-sm shadow-none focus-visible:ring-0"
             disabled={!repoId || thinking}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -198,7 +204,7 @@ export function AskPanel({
             <ArrowUp className="size-4" />
           </Button>
         </div>
-        <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
+        <p className="mt-1.5 hidden text-center text-[11px] text-muted-foreground sm:block">
           Enter to send · Shift+Enter for a new line · follow-ups keep context
         </p>
       </div>

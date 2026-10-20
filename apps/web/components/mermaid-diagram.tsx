@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { useTheme } from "next-themes";
 
 /** Renders a Mermaid diagram client-side; falls back to the source text if it can't. */
 export function MermaidDiagram({ code }: { code: string }) {
   const id = "m" + useId().replace(/[^a-zA-Z0-9]/g, "");
   const [svg, setSvg] = useState("");
   const [failed, setFailed] = useState(false);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const mermaid = (await import("mermaid")).default;
-        const dark = document.documentElement.classList.contains("dark");
+        const dark = resolvedTheme === "dark";
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: "strict",
@@ -21,15 +23,15 @@ export function MermaidDiagram({ code }: { code: string }) {
           themeVariables: dark
             ? {
                 darkMode: true, background: "transparent", fontSize: "13px",
-                primaryColor: "#18181b", primaryTextColor: "#e4e4e7", primaryBorderColor: "#3f3f46",
-                lineColor: "#52525b", clusterBkg: "#0f0f11", clusterBorder: "#27272a",
-                titleColor: "#a1a1aa", edgeLabelBackground: "#18181b", tertiaryTextColor: "#a1a1aa",
+                primaryColor: "#17223D", primaryTextColor: "#F3EEE6", primaryBorderColor: "#2F4672",
+                lineColor: "#5B9DF5", clusterBkg: "#18191D", clusterBorder: "#2A2C32",
+                titleColor: "#9A9DA6", edgeLabelBackground: "#18191D", tertiaryTextColor: "#9A9DA6",
               }
             : {
-                background: "transparent", fontSize: "13px", primaryColor: "#ffffff",
-                primaryTextColor: "#18181b", primaryBorderColor: "#d4d4d8", lineColor: "#a1a1aa",
-                clusterBkg: "#fafafa", clusterBorder: "#e4e4e7", titleColor: "#52525b",
-                edgeLabelBackground: "#ffffff",
+                background: "transparent", fontSize: "13px", primaryColor: "#FFF5E7",
+                primaryTextColor: "#17223D", primaryBorderColor: "#17223D", lineColor: "#2F80ED",
+                clusterBkg: "#F8F5F0", clusterBorder: "#E3DCD0", titleColor: "#5D667A",
+                edgeLabelBackground: "#FFFFFF",
               },
           fontFamily: "Geist, system-ui, sans-serif",
           flowchart: { curve: "basis", htmlLabels: true, padding: 12 },
@@ -44,17 +46,17 @@ export function MermaidDiagram({ code }: { code: string }) {
     return () => {
       cancelled = true;
     };
-  }, [code, id]);
+  }, [code, id, resolvedTheme]);
 
   if (failed) {
     return (
-      <pre className="code-scroll overflow-x-auto rounded-xl bg-black/60 p-4 font-mono text-xs text-zinc-300">{code}</pre>
+      <pre className="scroll-thin-code overflow-x-auto rounded-xl bg-code p-4 font-mono text-xs text-code-foreground">{code}</pre>
     );
   }
   if (!svg) return <div className="h-64 animate-pulse rounded-xl bg-secondary/50" />;
   return (
     <div
-      className="code-scroll overflow-x-auto rounded-xl border border-border bg-card p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-none"
+      className="scroll-thin-code overflow-x-auto rounded-xl border border-border bg-card p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-none"
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

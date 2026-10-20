@@ -15,12 +15,21 @@ from .config import settings
 log = logging.getLogger(__name__)
 
 IGNORE_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
-               "dist", "build", ".next", ".turbo", "coverage", ".pytest_cache"}
+               "dist", "build", ".next", ".turbo", "coverage", ".pytest_cache",
+               # more generated / vendored / editor output (uploads often include these)
+               "vendor", "bower_components", "target", ".gradle", ".idea", ".mypy_cache",
+               ".ruff_cache", ".tox", ".nuxt", ".svelte-kit", ".parcel-cache", ".terraform",
+               "__MACOSX", ".hg", ".svn"}
 IGNORE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff",
               ".woff2", ".ttf", ".eot", ".mp4", ".pdf", ".zip", ".lock",
               # secrets / databases / build junk — never index, never send to an LLM
               ".db", ".sqlite", ".sqlite3", ".pem", ".key", ".p12", ".pfx",
-              ".keystore", ".jks", ".tsbuildinfo"}
+              ".keystore", ".jks", ".tsbuildinfo",
+              # compiled artifacts, archives, media and model weights
+              ".class", ".jar", ".war", ".o", ".so", ".dll", ".exe", ".dylib", ".a", ".wasm",
+              ".pyc", ".map", ".bin", ".dat", ".mp3", ".wav", ".webp", ".avif", ".bmp", ".tiff",
+              ".psd", ".gz", ".tar", ".tgz", ".7z", ".rar", ".bz2", ".xz", ".iso", ".dmg",
+              ".pkl", ".pt", ".onnx", ".h5", ".parquet", ".npy"}
 IGNORE_FILES = {".DS_Store", "package-lock.json", "pnpm-lock.yaml",
                 "id_rsa", "id_ed25519", ".npmrc", ".pypirc", ".netrc"}
 ENV_TEMPLATES = (".example", ".sample", ".template", ".dist")
@@ -36,20 +45,27 @@ def repo_id_for(source: str) -> str:
     return hashlib.sha1(source.encode()).hexdigest()[:12]
 
 
-def _should_keep(path: str) -> bool:
+def skip_reason(path: str) -> str | None:
+    """Why a path is left out of the index (None = keep it). `path` uses os.sep."""
     parts = path.split(os.sep)
-    if any(p in IGNORE_DIRS for p in parts):
-        return False
+    if any(p in IGNORE_DIRS for p in parts[:-1]):
+        return "generated"  # node_modules, .git, build output, vendored code …
     name = parts[-1]
-    if name in IGNORE_FILES:
-        return False
+    if name in IGNORE_FILES or name.startswith("._"):  # ._x: macOS resource forks in zips
+        return "secret" if name in ("id_rsa", "id_ed25519", ".npmrc", ".pypirc", ".netrc") else "generated"
     # .env, .env.local, prod.env … (but keep .env.example and friends)
     if (name.startswith(".env") or name.endswith(".env")) and not name.endswith(ENV_TEMPLATES):
-        return False
+        return "secret"
+    if name.endswith((".min.js", ".min.css")):  # minified bundles: generated, unreadable
+        return "generated"
     _, ext = os.path.splitext(path)
     if ext.lower() in IGNORE_EXT:
-        return False
-    return True
+        return "secret" if ext.lower() in (".pem", ".key", ".p12", ".pfx", ".keystore", ".jks") else "binary"
+    return None
+
+
+def _should_keep(path: str) -> bool:
+    return skip_reason(path) is None
 
 
 def _is_binary(full: str) -> bool:

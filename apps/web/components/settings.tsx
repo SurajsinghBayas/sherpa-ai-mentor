@@ -155,14 +155,15 @@ export function Settings() {
   return (
     <main className="container max-w-2xl py-10 space-y-8">
       <motion.div {...rise(0)}>
-        <h1 className="text-2xl font-semibold tracking-tight">Keys & endpoints</h1>
+        <p className="eyebrow">Settings</p>
+        <h1 className="mt-1 text-3xl font-semibold">Keys & endpoints</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Stored Fernet-encrypted. The UI only shows the last 4 characters of each key.
         </p>
       </motion.div>
 
       {/* ── Provider keys ── */}
-      <motion.section {...rise(1)} className="rounded-2xl border border-border bg-card overflow-hidden">
+      <motion.section {...rise(1)} className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
         <div className="flex items-center gap-3 border-b border-border px-6 py-4">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary">
             <KeyRound className="size-4 text-foreground" />
@@ -184,7 +185,7 @@ export function Settings() {
                     animate={{ opacity: 1, x: 0 }}
                     className="flex items-center gap-3 rounded-xl border border-border bg-secondary/30 px-4 py-3 text-sm"
                   >
-                    <Badge variant="secondary" className="text-[10px]">{k.provider}</Badge>
+                    <Badge variant="secondary">{k.provider}</Badge>
                     <span className="font-medium">{k.label}</span>
                     <span className="font-mono text-xs text-muted-foreground">
                       {k.model} · ••••{k.last4}
@@ -274,7 +275,7 @@ export function Settings() {
       </motion.section>
 
       {/* ── Custom endpoints ── */}
-      <motion.section {...rise(2)} className="rounded-2xl border border-border bg-card overflow-hidden">
+      <motion.section {...rise(2)} className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
         <div className="flex items-center gap-3 border-b border-border px-6 py-4">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary">
             <Plug className="size-4 text-foreground" />
@@ -298,7 +299,7 @@ export function Settings() {
                     animate={{ opacity: 1, x: 0 }}
                     className="flex items-center gap-3 rounded-xl border border-border bg-secondary/30 px-4 py-3 text-sm"
                   >
-                    <Badge variant="outline" className="text-[10px] shrink-0">{e.kind}</Badge>
+                    <Badge variant="outline" className="shrink-0">{e.kind}</Badge>
                     <span className="font-medium shrink-0">{e.name}</span>
                     <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
                       {e.base_url}

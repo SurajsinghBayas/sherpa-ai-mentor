@@ -52,20 +52,31 @@ class Embedder:
             raise RuntimeError(f"bedrock embeddings HTTP {r.status_code}: {r.text[:200]}")
         raise RuntimeError("bedrock embeddings: retries exhausted")
 
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Embed many texts concurrently. Raises if any request ultimately fails."""
+    def embed_documents(self, texts: List[str], on_progress=None) -> List[List[float]]:
+        """Embed many texts concurrently. Raises if any request ultimately fails.
+
+        `on_progress(done, total)` is called from worker threads as texts finish.
+        """
         if not texts:
             return []
         failed = threading.Event()  # first permanent error stops the remaining requests
+        done = [0]
+        lock = threading.Lock()
 
         def one(t: str) -> List[float]:
             if failed.is_set():
                 raise RuntimeError("skipped after an earlier failure")
             try:
-                return self._one(client, t, "GENERIC_INDEX")
+                v = self._one(client, t, "GENERIC_INDEX")
             except Exception:
                 failed.set()
                 raise
+            if on_progress:
+                with lock:
+                    done[0] += 1
+                    n = done[0]
+                on_progress(n, len(texts))
+            return v
 
         with httpx.Client(timeout=30) as client, \
                 ThreadPoolExecutor(max(1, settings.embedding_concurrency)) as pool:

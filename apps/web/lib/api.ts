@@ -116,6 +116,54 @@ export type CheckResult =
   | { status: "outdated" | "error"; detail: string; commit: string; latest?: string }
   | { status: "unsupported"; commit: string };
 
+export type UploadManifest = {
+  name: string; file_count: number; total_bytes: number;
+  languages: { language: string; files: number; bytes: number }[];
+  project_types: string[]; entry_points: string[];
+  skipped: Record<string, number>; skipped_count: number; skipped_dirs: string[];
+  truncated: boolean; top_level: string[];
+};
+export type UploadStatus = "review" | "queued" | "processing" | "ready" | "failed";
+export type UploadJob = {
+  job_id: string; repo_id: string; name: string; origin: "zip" | "folder" | "cli";
+  status: UploadStatus; stage: string; progress: number; detail: string;
+  manifest: UploadManifest | null; attempts: number; can_retry: boolean;
+  created_at: number; updated_at: number; finished_at: number | null;
+  updates_existing?: boolean;
+};
+
+/** POST a ZIP with upload progress (fetch can't report it, XHR can). */
+function uploadZip(zip: Blob, filename: string, name: string, origin: "zip" | "folder",
+                   onProgress: (fraction: number) => void): Promise<UploadJob> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", zip, filename);
+    form.append("name", name);
+    form.append("origin", origin);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API}/api/uploads`);
+    const t = tokenStore.get();
+    if (t) xhr.setRequestHeader("Authorization", `Bearer ${t}`);
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onerror = () => reject(new ApiError(0, `Can't reach the Sherpa API at ${API}`));
+    xhr.onload = () => {
+      let body: any = null;
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        /* non-JSON error page */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(body as UploadJob);
+      if (xhr.status === 401 && typeof window !== "undefined") {
+        tokenStore.clear();
+        window.location.assign("/login");
+      }
+      reject(new ApiError(xhr.status, typeof body?.detail === "string" ? body.detail : `upload failed (${xhr.status})`));
+    };
+    xhr.send(form);
+  });
+}
+
 export type StudyTaskId = "architecture" | "flow" | "starter";
 export type StudyResult = {
   id: string; participant: string; group: "control" | "sherpa"; task: StudyTaskId; repo: string;
@@ -160,6 +208,11 @@ export const api = {
   /** Manual "Reindex": rebuild the whole index from the source (docs are left to the Docs tab). */
   reindex: (repo_id: string) => req<SyncResult>("/api/sync", post({ repo_id, full: true, refresh_docs: false })),
   /** Automatic: new commit upstream → re-index only the changed files; cheap when unchanged. */
+  uploadZip,
+  startUpload: (job_id: string) => req<UploadJob>(`/api/uploads/${job_id}/start`, { method: "POST" }),
+  upload: (job_id: string) => req<UploadJob>(`/api/uploads/${job_id}`),
+  uploads: () => req<{ uploads: UploadJob[] }>("/api/uploads"),
+  discardUpload: (job_id: string) => req(`/api/uploads/${job_id}`, { method: "DELETE" }),
   checkUpdates: (repo_id: string) => req<CheckResult>(`/api/repos/${encodeURIComponent(repo_id)}/check`, { method: "POST" }),
   file: (repo_id: string, path: string) =>
     req<{ path: string; lines: string[]; total: number; language: string }>(

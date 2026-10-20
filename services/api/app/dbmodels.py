@@ -9,11 +9,13 @@
   keyed by content hash) created by migration 0002 and queried with raw SQL.
 - UsageCounter: per-user daily quotas.
 - EmailOtp: one-time sign-in / sign-up codes (only a keyed hash of the code is stored).
+- IngestJob: a background ingestion of an uploaded codebase (ZIP, folder or CLI).
 """
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import (JSON, DateTime, Float, ForeignKey, Index, Integer, LargeBinary, String,
+                        Text, func)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -173,3 +175,27 @@ class EmailOtp(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     consumed: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[float] = mapped_column(Float)
+
+
+class IngestJob(Base):
+    """review → queued → processing → ready | failed. `payload` holds the accepted files
+    (gzipped JSON) so a failed job can be retried without uploading again; it is cleared
+    once the job succeeds."""
+    __tablename__ = "ingest_jobs"
+    __table_args__ = (Index("ix_ingest_jobs_user", "user_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    repo_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    name: Mapped[str] = mapped_column(String(200))
+    origin: Mapped[str] = mapped_column(String(16), default="zip")  # zip | folder | cli
+    status: Mapped[str] = mapped_column(String(16))
+    stage: Mapped[str] = mapped_column(String(32), default="")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    manifest: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    payload: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[float] = mapped_column(Float)
+    updated_at: Mapped[float] = mapped_column(Float)
+    finished_at: Mapped[float | None] = mapped_column(Float, nullable=True)

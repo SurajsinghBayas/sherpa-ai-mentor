@@ -50,7 +50,7 @@ function Bars({ summary }: { summary: StudySummary }) {
           <div className="mb-1.5 flex items-baseline gap-2 text-sm">
             <span className="font-medium">{t.title}</span>
             {t.time_saved_pct !== null && (
-              <Badge variant={t.time_saved_pct > 0 ? "success" : "warning"} className="text-[10px]">
+              <Badge variant={t.time_saved_pct > 0 ? "success" : "warning"} >
                 {t.time_saved_pct > 0 ? `${t.time_saved_pct}% faster with Sherpa` : `${-t.time_saved_pct}% slower with Sherpa`}
               </Badge>
             )}
@@ -63,8 +63,8 @@ function Bars({ summary }: { summary: StudySummary }) {
                 <div className="h-5 flex-1 rounded bg-secondary/50">
                   {v !== null && (
                     <div
-                      className={cn("flex h-5 items-center justify-end rounded pr-1.5 text-[10px] font-medium",
-                        g === "control" ? "bg-zinc-500/60 text-white" : "bg-sky-500/80 text-white")}
+                      className={cn("flex h-5 items-center justify-end rounded pr-1.5 text-[11px] font-medium tabular-nums",
+                        g === "control" ? "bg-muted-foreground/50 text-white" : "bg-primary text-primary-foreground")}
                       style={{ width: `${Math.max(8, (100 * v) / max)}%` }}
                     >
                       {v} min
@@ -175,10 +175,10 @@ export function Study() {
   return (
     <main className="container max-w-6xl space-y-8 py-8">
       <div>
-        <div className="flex items-center gap-2">
-          <FlaskConical className="size-5" />
-          <h1 className="text-xl font-semibold">Newcomer user study</h1>
-        </div>
+        <p className="eyebrow flex items-center gap-1.5">
+          <FlaskConical className="size-3.5" /> Research
+        </p>
+        <h1 className="mt-1 text-3xl font-semibold">Newcomer user study</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           Does Sherpa help newcomers understand a codebase faster? Give the same tasks to two groups — one with the
           repository only, one with the repository plus Sherpa — time each task, and score it against a reference
@@ -310,7 +310,7 @@ export function Study() {
                 </div>
               )}
               {(summary.participants.control < 3 || summary.participants.sherpa < 3) && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                <p className="text-[11px] text-warning">
                   Small sample — report these as indicative, not statistically significant.
                 </p>
               )}

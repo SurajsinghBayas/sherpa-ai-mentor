@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sherpa-cli"
+version = "0.1.0"
+description = "Upload a local codebase to Sherpa AI and ask about it from the terminal"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+sherpa = "sherpa_cli:main"
+
+[tool.setuptools]
+py-modules = ["sherpa_cli"]

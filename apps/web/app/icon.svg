@@ -1,9 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#0d0d0d"/>
-  <g fill="#5ea8ff">
-    <circle cx="16" cy="16" r="3.2"/>
-    <circle cx="16" cy="7.5" r="1.8"/><circle cx="23.4" cy="11.8" r="1.8"/>
-    <circle cx="23.4" cy="20.2" r="1.8"/><circle cx="16" cy="24.5" r="1.8"/>
-    <circle cx="8.6" cy="20.2" r="1.8"/><circle cx="8.6" cy="11.8" r="1.8"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges">
+<rect width="64" height="64" rx="14" fill="#2F80ED"/>
+<svg x="8" y="10" width="48" height="40" viewBox="14 7 36 30">
+<rect x="19" y="34" width="26" height="4" fill="#2F80ED"/>
+<rect x="15" y="14" width="34" height="21" fill="#17223D"/>
+<rect x="18" y="10" width="28" height="26" fill="#17223D"/>
+<rect x="21" y="8" width="22" height="4" fill="#17223D"/>
+<rect x="18" y="13" width="28" height="20" fill="#FFF5E7"/>
+<rect x="21" y="10" width="22" height="24" fill="#FFF5E7"/>
+<rect x="18" y="19" width="28" height="10" fill="#2F80ED"/>
+<rect x="20" y="20" width="24" height="7" fill="#A9D5FF"/>
+<rect x="24" y="22" width="4" height="4" fill="#17223D"/>
+<rect x="36" y="22" width="4" height="4" fill="#17223D"/>
+<rect x="29" y="28" width="7" height="2" fill="#101827"/>
+<rect x="31" y="30" width="3" height="1" fill="#F28BA8"/>
+</svg>
 </svg>

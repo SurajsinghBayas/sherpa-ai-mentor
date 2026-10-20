@@ -34,6 +34,7 @@ from .models import (AskRequest, DocsRequest, FreshnessRequest, IngestRequest,
 from .routers import auth as auth_router
 from .routers import keys as keys_router
 from .routers import study as study_router
+from .routers import uploads as uploads_router
 from .persist import SqlBackend, vectors_supported
 from .security import decrypt_secret, get_current_user
 from .store import RepoStore, file_hash
@@ -83,6 +84,7 @@ app.add_middleware(
 app.include_router(auth_router.router)
 app.include_router(keys_router.router)
 app.include_router(study_router.router)
+app.include_router(uploads_router.router)
 
 # ── In-memory repo store cache (LRU; reloaded when the DB version moves on) ────
 _stores: "OrderedDict[str, RepoStore]" = OrderedDict()
@@ -178,7 +180,9 @@ class BodyLimit:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        limit = settings.max_body_bytes
+        # uploaded codebases are the one place a large body is expected
+        limit = (settings.max_upload_mb * 1024 * 1024 + 64 * 1024
+                 if scope.get("path") == "/api/uploads" else settings.max_body_bytes)
         declared = dict(scope.get("headers") or []).get(b"content-length")
         if declared is not None:
             try:
@@ -368,6 +372,26 @@ def health():
             "local_ingest": settings.allow_local_ingest}
 
 
+# The CLI is one stdlib-only file; serving it here means anyone signed in to this
+# deployment can install it without access to the source repository.
+CLI_PATH = os.path.join(os.path.dirname(__file__), "static", "sherpa_cli.py")
+
+
+@app.get("/cli/sherpa.py", response_class=PlainTextResponse)
+def download_cli(request: Request):
+    """The `sherpa` CLI, preset to talk to the API it was downloaded from."""
+    try:
+        with open(CLI_PATH, encoding="utf-8") as f:
+            src = f.read()
+    except OSError:
+        raise HTTPException(404, "CLI not bundled with this server")
+    base = str(request.base_url).rstrip("/")  # https behind the proxy thanks to --proxy-headers
+    src = src.replace('DEFAULT_API = "http://localhost:8000"', f"DEFAULT_API = {base!r}", 1)
+    return PlainTextResponse(src, media_type="text/x-python; charset=utf-8",
+                             headers={"Cache-Control": "public, max-age=300",
+                                      "Content-Disposition": 'inline; filename="sherpa"'})
+
+
 @app.get("/ready")
 def ready():
     """Readiness for the load balancer: 503 until the database answers."""
@@ -415,6 +439,9 @@ def _source_of(store: RepoStore) -> IngestRequest:
     src, kind = store.meta.get("source", ""), store.meta.get("kind")
     if kind == "self":
         raise HTTPException(422, "use /api/ingest-self to re-index Sherpa itself")
+    if kind == "upload":
+        raise HTTPException(422, "this project was uploaded; upload it again to update it "
+                                 "(only changed files are re-indexed)")
     is_git = kind != "local" and src.startswith("http")
     return _validate_source(IngestRequest(repo_url=src if is_git else None,
                                           local_path=None if is_git else src,
@@ -480,7 +507,7 @@ def check_for_updates(repo_id: str, request: Request, user=Depends(get_current_u
     _check_rate(request, "check", user)
     old = get_store(repo_id, user, db)
     kind, current = old.meta.get("kind"), old.meta.get("commit") or ""
-    if kind == "self":
+    if kind in ("self", "upload"):  # no remote to compare with; uploads update by re-uploading
         return {"status": "unsupported", "commit": current}
     src = _source_of(old)
     if src.repo_url:

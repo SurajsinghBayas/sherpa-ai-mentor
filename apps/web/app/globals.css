@@ -2,196 +2,157 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Brand tokens from the Sherpa AI style guide.
+   Light: warm paper + navy ink + Sherpa blue. Dark: the navy card from the logo sheet. */
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 0 0% 7%;
+    --background: 40 33% 96%;        /* #F8F5F0 paper */
+    --foreground: 223 45% 16%;       /* #17223D navy */
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 7%;
+    --card-foreground: 223 45% 16%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 7%;
-    --primary: 0 0% 7%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 94%;
-    --secondary-foreground: 0 0% 7%;
-    --muted: 0 0% 94%;
-    --muted-foreground: 0 0% 46%;
-    --accent: 0 0% 94%;
-    --accent-foreground: 0 0% 7%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 0 0% 7%;
-    --radius: 0.75rem;
+    --popover-foreground: 223 45% 16%;
+    --primary: 215 84% 56%;          /* #2F80ED Sherpa blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 38 30% 91%;         /* #F1EBE1 */
+    --secondary-foreground: 223 45% 16%;
+    --muted: 38 30% 92%;
+    --muted-foreground: 223 13% 42%; /* #5D667A */
+    --accent: 38 30% 92%;
+    --accent-foreground: 223 45% 16%;
+    --destructive: 2 68% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 152 52% 32%;
+    --warning: 27 68% 40%;           /* bark-leaning amber, readable on paper */
+    --border: 36 22% 85%;            /* #E3DCD0 */
+    --input: 36 18% 80%;
+    --ring: 215 84% 56%;
+    --radius: 0.625rem;
 
-    --sherpa-glow: 214 100% 60%;
-    --sherpa-dot: 214 80% 65%;
+    --code: 222 42% 11%;             /* #101827 */
+    --code-foreground: 36 60% 92%;
+    --code-muted: 222 15% 50%;
+    --code-line: 215 84% 56%;
   }
 
   .dark {
-    --background: 0 0% 5%;
-    --foreground: 0 0% 93%;
-    --card: 0 0% 8%;
-    --card-foreground: 0 0% 93%;
-    --popover: 0 0% 9%;
-    --popover-foreground: 0 0% 93%;
-    --primary: 0 0% 93%;
-    --primary-foreground: 0 0% 7%;
-    --secondary: 0 0% 13%;
-    --secondary-foreground: 0 0% 93%;
-    --muted: 0 0% 13%;
-    --muted-foreground: 0 0% 58%;
-    --accent: 0 0% 15%;
-    --accent-foreground: 0 0% 93%;
-    --destructive: 0 62% 50%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14%;
-    --input: 0 0% 14%;
-    --ring: 0 0% 83%;
+    /* neutral charcoal, so the brand navy and blue read as accents (code, cards, links) */
+    --background: 228 9% 8%;         /* #121316 */
+    --foreground: 36 37% 92%;        /* cream ink */
+    --card: 228 9% 10.4%;            /* #18191D */
+    --card-foreground: 36 37% 92%;
+    --popover: 230 9% 12%;
+    --popover-foreground: 36 37% 92%;
+    --primary: 214 89% 66%;          /* #5B9DF5 */
+    --primary-foreground: 222 45% 10%;
+    --secondary: 223 9% 15%;
+    --secondary-foreground: 36 37% 92%;
+    --muted: 223 9% 15%;
+    --muted-foreground: 225 6% 63%;
+    --accent: 223 9% 16%;
+    --accent-foreground: 36 37% 92%;
+    --destructive: 2 70% 60%;
+    --destructive-foreground: 222 45% 10%;
+    --success: 150 45% 58%;
+    --warning: 30 82% 64%;           /* tan */
+    --border: 225 9% 18%;            /* #2A2C32 */
+    --input: 225 8% 24%;
+    --ring: 214 89% 66%;
 
-    --sherpa-glow: 214 100% 65%;
-    --sherpa-dot: 214 90% 72%;
+    --code: 223 45% 16%;             /* #17223D brand navy */
+    --code-foreground: 36 45% 90%;
+    --code-muted: 222 18% 55%;
+    --code-line: 214 89% 66%;
   }
 
   * {
     @apply border-border;
-    box-sizing: border-box;
   }
 
   html {
-    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "ss01", "ss02", "cv01", "cv02";
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01", "cv11";
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   ::selection {
-    background: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
+    background: hsl(var(--primary) / 0.22);
   }
 
   :focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
-}
 
-/* --- reduced motion --- */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
-/* --- page-level entry animations --- */
-@layer utilities {
-  .animate-enter {
-    animation: enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+@layer components {
+  /* Letter-spaced mono eyebrow, as on the style guide ("CODEBASE MENTOR"). */
+  .eyebrow {
+    @apply font-mono text-[11px] font-medium uppercase text-muted-foreground;
+    letter-spacing: 0.14em;
   }
-  .animate-enter-up {
-    animation: enter-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  /* Mascot art is pixel art: never smooth it. */
+  .pixelated {
+    image-rendering: pixelated;
   }
-  .animate-fade-in {
-    animation: fade-in 0.4s ease-out both;
+
+  /* Speech bubble with a stepped (pixel) tail, used next to the mascot. */
+  .bubble {
+    @apply relative rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-card-foreground shadow-card;
   }
-  .animate-scale-in {
-    animation: scale-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  .bubble-left::before,
+  .bubble-left::after {
+    content: "";
+    position: absolute;
+    left: -7px;
+    top: 14px;
+    width: 7px;
+    height: 7px;
+    background: hsl(var(--border));
+    clip-path: polygon(0 50%, 100% 0, 100% 100%);
   }
-  .animate-slide-up {
-    animation: slide-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  .bubble-left::after {
+    left: -5px;
+    background: hsl(var(--card));
   }
-}
-
-/* stagger children */
-.stagger > * {
-  animation: enter-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-.stagger > *:nth-child(1) { animation-delay: 0.00s; }
-.stagger > *:nth-child(2) { animation-delay: 0.06s; }
-.stagger > *:nth-child(3) { animation-delay: 0.12s; }
-.stagger > *:nth-child(4) { animation-delay: 0.18s; }
-.stagger > *:nth-child(5) { animation-delay: 0.24s; }
-.stagger > *:nth-child(6) { animation-delay: 0.30s; }
-
-/* scrollbars */
-.custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-.custom-scroll::-webkit-scrollbar-track { background: transparent; }
-.custom-scroll::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 6px;
-}
-.custom-scroll::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.4);
-}
-
-/* code scrollbar */
-.code-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
-.code-scroll::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 6px;
-}
-
-/* glassmorphism */
-.glass {
-  background: hsl(var(--background) / 0.8);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-}
-
-/* subtle noise texture overlay */
-.noise::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-  pointer-events: none;
-  border-radius: inherit;
-}
-
-/* Sherpa orb glow */
-.sherpa-glow {
-  filter: drop-shadow(0 0 12px hsl(var(--sherpa-glow) / 0.5));
-}
-
-/* chat message styles */
-.message-user {
-  @apply ml-auto max-w-[75%] rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-sm text-primary-foreground;
-}
-.message-sherpa {
-  @apply mr-auto max-w-[85%] rounded-2xl rounded-tl-sm bg-card px-4 py-3 text-sm border border-border;
-}
-
-/* gradient text */
-.gradient-text {
-  background: linear-gradient(135deg, hsl(var(--foreground)) 0%, hsl(var(--muted-foreground)) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* hero radial glow */
-.hero-glow {
-  background: radial-gradient(
-    ellipse 60% 40% at 50% 0%,
-    hsl(var(--sherpa-glow) / 0.08) 0%,
-    transparent 70%
-  );
-}
-
-/* inline code */
-code:not([class]) {
-  @apply rounded px-1.5 py-0.5 font-mono text-xs;
-  background: hsl(var(--secondary));
 }
 
 @layer utilities {
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scroll-thin-code {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--code-muted) / 0.5) transparent;
+  }
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+/* inline code in prose */
+code:not([class]) {
+  @apply rounded border border-border bg-secondary px-1 py-px font-mono text-[0.85em];
 }

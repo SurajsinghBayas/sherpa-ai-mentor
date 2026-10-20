@@ -63,7 +63,7 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
   return (
     <>
       <motion.div
-        className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-[2px]"
+        className="fixed inset-0 z-overlay bg-navy-deep/40"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -72,11 +72,11 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
       <motion.aside
         role="dialog"
         aria-label={`Source: ${path}`}
-        className="fixed inset-y-0 right-0 z-[61] flex w-full max-w-3xl flex-col border-l border-border bg-card shadow-2xl"
+        className="fixed inset-y-0 right-0 z-overlay flex w-full max-w-3xl flex-col border-l border-border bg-card shadow-pop"
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
         exit={{ x: "100%" }}
-        transition={{ type: "spring", damping: 30, stiffness: 300 }}
+        transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
       >
         <header className="flex items-center gap-3 border-b border-border px-4 py-3">
           <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
@@ -94,6 +94,7 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
             disabled={!lines}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40"
             title="Copy cited lines"
+            aria-label="Copy cited lines"
           >
             <Copy className="size-4" />
           </button>
@@ -101,11 +102,12 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
             onClick={onClose}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
             title="Close (Esc)"
+            aria-label="Close"
           >
             <X className="size-4" />
           </button>
         </header>
-        <div className="code-scroll flex-1 overflow-auto bg-black/40 py-3 font-mono text-[12px] leading-[1.6]">
+        <div className="scroll-thin-code flex-1 overflow-auto bg-code py-3 font-mono text-[12px] leading-[1.6] text-code-foreground">
           {error && <p className="px-4 text-sm text-destructive">{error}</p>}
           {!lines && !error && <p className="px-4 text-sm text-muted-foreground">Loading…</p>}
           {lines?.map((ln, i) => {
@@ -115,17 +117,17 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
               <div
                 key={n}
                 ref={n === target.start ? firstRef : undefined}
-                className={cn("flex min-w-max pr-4", hit && "bg-sky-500/15")}
+                className={cn("flex min-w-max pr-4", hit && "bg-code-line/15")}
               >
                 <span
                   className={cn(
                     "sticky left-0 w-14 shrink-0 select-none pr-3 text-right",
-                    hit ? "bg-sky-950/80 text-sky-300" : "bg-[#0d0d0d] text-zinc-600"
+                    hit ? "bg-[hsl(var(--code))] text-sky-brand shadow-[inset_2px_0_0_hsl(var(--code-line))]" : "bg-code text-code-muted"
                   )}
                 >
                   {n}
                 </span>
-                <span className={cn("whitespace-pre pl-3", hit ? "text-zinc-100" : "text-zinc-400")}>
+                <span className={cn("whitespace-pre pl-3", hit ? "text-code-foreground" : "text-code-foreground/70")}>
                   {ln || " "}
                 </span>
               </div>
@@ -159,9 +161,9 @@ export function CitationChip({
       onClick={() => open(file, start, end)}
       title={`Open ${file} lines ${start}-${end}`}
       className={cn(
-        "mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md border border-sky-500/25 bg-sky-500/10",
-        "px-1.5 py-px align-baseline font-mono text-[11px] leading-5 text-sky-700 dark:text-sky-300",
-        "transition-colors hover:border-sky-500/50 hover:bg-sky-500/20",
+        "mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md border border-primary/25 bg-primary/[0.07]",
+        "px-1.5 py-px align-baseline font-mono text-[11px] leading-5 text-primary",
+        "transition-colors hover:border-primary/50 hover:bg-primary/15",
         className
       )}
     >

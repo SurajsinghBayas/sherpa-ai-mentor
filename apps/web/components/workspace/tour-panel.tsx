@@ -68,12 +68,13 @@ export function TourPanel({
         </div>
       </div>
 
-      <div className="custom-scroll flex-1 overflow-y-auto p-4 sm:p-6">
+      <div className="scroll-thin flex-1 overflow-y-auto p-4 sm:p-6">
         {!tour ? (
           <EmptyState
             busy={busy === "tour"}
+            pose="exploring"
             title="Guided code tours"
-            body="Name a feature and Sherpa walks you through the code that runs, in execution order — UI → API → logic → data."
+            body="Name a feature and Sherpa walks you through the code that runs, in the order it runs: UI, API, logic, data."
           >
             <div className="flex flex-wrap justify-center gap-2">
               {EXAMPLES.map((x) => (
@@ -84,7 +85,7 @@ export function TourPanel({
                     setFlow(x);
                     build(x);
                   }}
-                  className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                  className="rounded-md border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-input hover:text-foreground disabled:opacity-40"
                 >
                   {x}
                 </button>
@@ -96,7 +97,7 @@ export function TourPanel({
             <FadeIn>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="mr-auto text-lg font-semibold">{tour.title}</h2>
-                <Badge variant="secondary" className="text-[10px]">
+                <Badge variant="secondary">
                   <Clock /> ~{tour.estimated_minutes} min · {tour.steps.length} stops
                 </Badge>
                 <ModeBadge mode={tour.mode} model={tour.model} />

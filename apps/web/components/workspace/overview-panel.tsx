@@ -12,15 +12,15 @@ import { cn } from "../../lib/utils";
 import { EmptyState, FadeIn, ModeBadge, SectionLabel, VerifiedBadge } from "./shared";
 
 const LAYER_TONE: Record<string, string> = {
-  frontend: "border-l-violet-500/70",
-  backend: "border-l-sky-500/70",
-  api: "border-l-emerald-500/70",
-  data: "border-l-amber-500/70",
-  infra: "border-l-rose-500/70",
-  tooling: "border-l-zinc-500/70",
-  docs: "border-l-zinc-500/70",
-  tests: "border-l-zinc-500/70",
-  shared: "border-l-teal-500/70",
+  frontend: "border-l-primary",
+  backend: "border-l-navy dark:border-l-sky-brand",
+  api: "border-l-sky-brand dark:border-l-primary",
+  data: "border-l-tan",
+  infra: "border-l-bark",
+  tooling: "border-l-muted-foreground/40",
+  docs: "border-l-muted-foreground/40",
+  tests: "border-l-muted-foreground/40",
+  shared: "border-l-muted-foreground/40",
 };
 
 export function OverviewPanel({
@@ -49,11 +49,12 @@ export function OverviewPanel({
 
   if (!data) {
     return (
-      <div className="custom-scroll flex-1 overflow-y-auto p-6">
+      <div className="scroll-thin flex-1 overflow-y-auto p-6">
         <EmptyState
           busy={busy === "overview"}
+          pose="analyzing"
           title="Architecture map"
-          body="Sherpa resolves the real import graph, groups files into components, and explains how they connect — every claim linked to code."
+          body="Sherpa resolves the real import graph, groups files into components, and explains how they connect. Every claim links to the code."
         >
           <Button onClick={() => generate()} disabled={!repoId || !!busy}>
             <Map className="size-4" />
@@ -66,7 +67,7 @@ export function OverviewPanel({
   }
 
   return (
-    <div className="custom-scroll flex-1 overflow-y-auto">
+    <div className="scroll-thin flex-1 overflow-y-auto">
       <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6">
         <FadeIn>
           <div className="flex flex-wrap items-center gap-2">
@@ -77,7 +78,7 @@ export function OverviewPanel({
               <RefreshCw className={cn("size-3.5", busy === "overview" && "animate-spin")} /> Regenerate
             </Button>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] tabular-nums text-muted-foreground">
             <Badge variant="outline" className="font-normal">{data.stats.files} files</Badge>
             <Badge variant="outline" className="font-normal">{data.components.length} components</Badge>
             <Badge variant="outline" className="font-normal">{data.stats.imports} resolved imports</Badge>
@@ -114,7 +115,7 @@ export function OverviewPanel({
                       {c.key}/ · {c.files_count} file{c.files_count === 1 ? "" : "s"}
                     </p>
                   </div>
-                  <Badge variant="outline" className="shrink-0 text-[10px] font-normal">{c.layer}</Badge>
+                  <Badge variant="outline" className="shrink-0 font-normal">{c.layer}</Badge>
                 </div>
                 <Markdown text={c.description} className="mt-2 text-[13px] text-muted-foreground" />
                 <div className="mt-2 flex flex-wrap gap-1">

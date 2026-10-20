@@ -36,9 +36,10 @@ export function TasksPanel({
 
   if (!data) {
     return (
-      <div className="custom-scroll flex-1 overflow-y-auto p-6">
+      <div className="scroll-thin flex-1 overflow-y-auto p-6">
         <EmptyState
           busy={busy === "tasks"}
+          pose="coding"
           title="Starter tasks"
           body="Sherpa scans for TODOs, untested modules and refactor candidates, then turns the best ones into first-PR tasks with steps and exact files."
         >
@@ -52,7 +53,7 @@ export function TasksPanel({
   }
 
   return (
-    <div className="custom-scroll flex-1 overflow-y-auto p-4 sm:p-6">
+    <div className="scroll-thin flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto max-w-4xl space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="mr-auto text-lg font-semibold">Good first contributions</h2>
@@ -67,11 +68,11 @@ export function TasksPanel({
             <div className="rounded-xl border border-border bg-card p-5">
               <div className="flex flex-wrap items-start gap-2">
                 <p className="mr-auto text-[15px] font-medium">{t.title}</p>
-                <Badge variant={t.difficulty === "easy" ? "success" : "info"} className="text-[10px]">
+                <Badge variant={t.difficulty === "easy" ? "success" : "info"} >
                   {t.difficulty}
                 </Badge>
                 {t.estimated_time && (
-                  <Badge variant="outline" className="text-[10px] font-normal">
+                  <Badge variant="outline" className="font-normal">
                     <Clock /> {t.estimated_time}
                   </Badge>
                 )}
@@ -85,7 +86,7 @@ export function TasksPanel({
               <ol className="mt-4 space-y-2">
                 {t.steps.map((s, j) => (
                   <li key={j} className="flex items-start gap-2.5 text-[13px]">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[10px] font-medium">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-secondary text-[11px] font-medium tabular-nums">
                       {j + 1}
                     </span>
                     <Markdown text={s} className="min-w-0 flex-1 text-[13px]" />

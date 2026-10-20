@@ -3,25 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail } from "lucide-react";
+import { useTheme } from "next-themes";
+import { OTPInput, REGEXP_ONLY_DIGITS } from "input-otp";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { cn } from "../lib/utils";
 import { Button, Input, Label } from "./ui/primitives";
-import { SherpaOrb } from "./sherpa-orb";
+import { Sherpa, type Pose } from "./sherpa";
 
-const ease = [0.22, 1, 0.36, 1] as const;
 type Mode = "login" | "signup";
 type AuthConfig = { google_client_id: string | null; email_otp: boolean; password: boolean };
-
-function rise(i: number) {
-  return {
-    initial: { opacity: 0, y: 14 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.5, delay: i * 0.07, ease },
-  };
-}
 
 function errorText(err: unknown, fallback: string) {
   return err instanceof ApiError ? err.message : fallback;
@@ -46,18 +39,52 @@ function useAuthConfig() {
   return cfg;
 }
 
-function Dots() {
+function Working({ children }: { children: React.ReactNode }) {
   return (
-    <span className="flex gap-1">
-      {[0, 1, 2].map((i) => (
-        <motion.span
-          key={i}
-          className="block h-1 w-1 rounded-full bg-primary-foreground"
-          animate={{ y: [0, -3, 0] }}
-          transition={{ duration: 0.8, delay: i * 0.15, repeat: Infinity }}
-        />
-      ))}
+    <span className="flex items-center gap-2">
+      <Loader2 className="animate-spin" /> {children}
     </span>
+  );
+}
+
+/** Six boxes for the emailed code; paste, autofill and the keyboard all work (input-otp). */
+function CodeInput({ value, onChange, onComplete, disabled }: {
+  value: string;
+  onChange: (v: string) => void;
+  onComplete: (v: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <OTPInput
+      id="code"
+      maxLength={6}
+      value={value}
+      onChange={onChange}
+      onComplete={onComplete}
+      pattern={REGEXP_ONLY_DIGITS}
+      inputMode="numeric"
+      autoComplete="one-time-code"
+      autoFocus
+      disabled={disabled}
+      containerClassName="flex items-center justify-between gap-2 has-[:disabled]:opacity-60"
+      render={({ slots }) => (
+        <>
+          {slots.map((slot, i) => (
+            <div
+              key={i}
+              className={cn(
+                "relative flex h-12 flex-1 items-center justify-center rounded-lg border border-input bg-card font-mono text-xl font-medium tabular-nums",
+                "transition-[border-color,box-shadow] duration-150",
+                slot.isActive && "border-ring ring-[3px] ring-ring/20"
+              )}
+            >
+              {slot.char ?? <span className="text-muted-foreground/40">·</span>}
+              {slot.hasFakeCaret && <span className="absolute h-5 w-px animate-pulse bg-foreground" />}
+            </div>
+          ))}
+        </>
+      )}
+    />
   );
 }
 
@@ -127,6 +154,7 @@ function GoogleButton({ clientId, mode, onBusy }: { clientId: string; mode: Mode
   const ref = useRef<HTMLDivElement>(null);
   const finish = useFinish();
   const [failed, setFailed] = useState(false);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -149,9 +177,9 @@ function GoogleButton({ clientId, mode, onBusy }: { clientId: string; mode: Mode
           },
         });
         window.google.accounts.id.renderButton(ref.current, {
-          theme: "filled_black",
+          theme: resolvedTheme === "dark" ? "filled_black" : "outline",
           size: "large",
-          shape: "pill",
+          shape: "rectangular",
           text: mode === "signup" ? "signup_with" : "continue_with",
           width: Math.min(ref.current.offsetWidth || 320, 400),
         });
@@ -161,7 +189,7 @@ function GoogleButton({ clientId, mode, onBusy }: { clientId: string; mode: Mode
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, mode]);
+  }, [clientId, mode, resolvedTheme]);
 
   if (failed) {
     return <p className="text-center text-xs text-muted-foreground">Google sign-in couldn&apos;t load. Use an email code instead.</p>;
@@ -230,32 +258,17 @@ function EmailCodeForm({ mode, onBusy }: { mode: Mode; onBusy: (b: boolean) => v
         }}
         className="space-y-4"
       >
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <Label htmlFor="code">6-digit code</Label>
-          <Input
-            id="code"
-            value={code}
-            onChange={(e) => {
-              const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-              setCode(v);
-              if (v.length === 6) verify(v);
-            }}
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            placeholder="••••••"
-            className="h-12 text-center font-mono text-xl tracking-[0.5em]"
-            autoFocus
-          />
-          <p className="text-xs text-muted-foreground">
-            Sent to <span className="text-foreground">{email.trim()}</span>. It expires in 10 minutes. Check spam if it
-            isn&apos;t there.
+          <CodeInput value={code} onChange={setCode} onComplete={verify} disabled={busy} />
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Sent to <span className="font-medium text-foreground">{email.trim()}</span>. It expires in 10 minutes; check spam
+            if it isn&apos;t there.
           </p>
         </div>
         <Button className="w-full" disabled={busy || code.length !== 6} size="lg">
           {busy ? (
-            <span className="flex items-center gap-2">
-              <Dots /> Verifying…
-            </span>
+            <Working>Verifying…</Working>
           ) : (
             <>
               {mode === "signup" ? "Create account" : "Sign in"} <ArrowRight className="size-4" />
@@ -266,7 +279,7 @@ function EmailCodeForm({ mode, onBusy }: { mode: Mode; onBusy: (b: boolean) => v
           <button
             type="button"
             onClick={() => setStep("email")}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            className="flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-3" /> Change email
           </button>
@@ -305,9 +318,7 @@ function EmailCodeForm({ mode, onBusy }: { mode: Mode; onBusy: (b: boolean) => v
       </div>
       <Button className="w-full" disabled={busy || !email.trim()} size="lg">
         {busy ? (
-          <span className="flex items-center gap-2">
-            <Dots /> Sending code…
-          </span>
+          <Working>Sending code…</Working>
         ) : (
           <>
             <Mail className="size-4" /> Email me a code
@@ -378,9 +389,7 @@ function PasswordForm({ mode, onBusy }: { mode: Mode; onBusy: (b: boolean) => vo
       </div>
       <Button className="w-full" disabled={busy} size="lg">
         {busy ? (
-          <span className="flex items-center gap-2">
-            <Dots /> {mode === "signup" ? "Creating account…" : "Signing in…"}
-          </span>
+          <Working>{mode === "signup" ? "Creating account…" : "Signing in…"}</Working>
         ) : (
           <>
             {mode === "signup" ? "Create account" : "Sign in"} <ArrowRight className="size-4" />
@@ -398,54 +407,75 @@ function AuthPage({ mode }: { mode: Mode }) {
   const [busy, setBusy] = useState(false);
   const [method, setMethod] = useState<"code" | "password">("code");
   const signup = mode === "signup";
+  const pose: Pose = busy ? "thinking" : signup ? "excited" : "happy";
 
   return (
-    <main className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4 py-10">
-      <div className="w-full max-w-sm">
-        <motion.div {...rise(0)} className="mb-8 flex justify-center">
-          <SherpaOrb size="lg" state={busy ? "thinking" : "idle"} />
-        </motion.div>
-
-        <motion.div {...rise(1)} className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">{signup ? "Create your account" : "Welcome back"}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {signup ? "No password needed. Ready in 20 seconds." : "Sign in to your Sherpa workspace"}
+    <main className="grid min-h-[calc(100dvh-3.5rem)] lg:grid-cols-[1fr_minmax(0,34rem)]">
+      <section className="flex items-center justify-center px-4 py-10 sm:px-8">
+        <div className="w-full max-w-sm animate-enter-up">
+          <div className="mb-6 flex items-center gap-3 lg:hidden">
+            <Sherpa pose={pose} size={56} decorative />
+            <p className="eyebrow">Codebase mentor</p>
+          </div>
+          <h1 className="text-2xl font-semibold">{signup ? "Create your account" : "Welcome back"}</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            {signup ? "No password needed. We email you a sign-in code." : "Sign in to pick up where you left off."}
           </p>
-        </motion.div>
 
-        <motion.div {...rise(2)} className="space-y-5 rounded-2xl border border-border bg-card p-6">
-          {cfg?.google_client_id && (
-            <>
-              <GoogleButton clientId={cfg.google_client_id} mode={mode} onBusy={setBusy} />
-              <div className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground">
-                <span className="h-px flex-1 bg-border" />
-                or
-                <span className="h-px flex-1 bg-border" />
-              </div>
-            </>
-          )}
+          <div className="mt-7 space-y-5">
+            {cfg?.google_client_id && (
+              <>
+                <GoogleButton clientId={cfg.google_client_id} mode={mode} onBusy={setBusy} />
+                <div className="eyebrow flex items-center gap-3">
+                  <span className="h-px flex-1 bg-border" />
+                  or
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              </>
+            )}
 
-          {method === "code" ? <EmailCodeForm mode={mode} onBusy={setBusy} /> : <PasswordForm mode={mode} onBusy={setBusy} />}
+            {method === "code" ? <EmailCodeForm mode={mode} onBusy={setBusy} /> : <PasswordForm mode={mode} onBusy={setBusy} />}
 
-          <button
-            type="button"
-            onClick={() => setMethod((m) => (m === "code" ? "password" : "code"))}
-            className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
-          >
-            {method === "code" ? `${signup ? "Sign up" : "Sign in"} with a password instead` : "Use an email code instead"}
-          </button>
-
-          <p className="border-t border-border pt-4 text-center text-sm text-muted-foreground">
-            {signup ? "Already have an account? " : "No account? "}
-            <Link
-              href={signup ? "/login" : "/signup"}
-              className="font-medium text-foreground underline-offset-4 hover:underline"
+            <button
+              type="button"
+              onClick={() => setMethod((m) => (m === "code" ? "password" : "code"))}
+              className="w-full text-center text-[13px] text-muted-foreground transition-colors hover:text-foreground"
             >
-              {signup ? "Sign in" : "Create one free"}
+              {method === "code" ? `${signup ? "Sign up" : "Sign in"} with a password instead` : "Use an email code instead"}
+            </button>
+          </div>
+
+          <p className="mt-8 border-t border-border pt-5 text-sm text-muted-foreground">
+            {signup ? "Already have an account? " : "New to Sherpa? "}
+            <Link href={signup ? "/login" : "/signup"} className="font-medium text-primary underline-offset-4 hover:underline">
+              {signup ? "Sign in" : "Create an account"}
             </Link>
           </p>
-        </motion.div>
-      </div>
+        </div>
+      </section>
+
+      {/* the guide, on the navy card from the logo sheet */}
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-l border-border bg-navy p-10 text-cream lg:flex">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-sky-brand">Sherpa AI · Codebase mentor</p>
+        <div className="flex flex-col items-start gap-6">
+          <div className="max-w-xs rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-[15px] leading-relaxed">
+            {busy
+              ? "One moment, checking that for you…"
+              : signup
+                ? "Hi! I'm Sherpa. Point me at a repository and I'll show you around, with the file and line for everything I say."
+                : "Good to see you again. Your repositories are right where you left them."}
+          </div>
+          <Sherpa pose={pose} size={192} />
+        </div>
+        <ul className="grid gap-2 text-sm text-cream/70">
+          {["Answers cite exact files and lines", "Architecture maps and guided tours", "GitHub, ZIP, folder or CLI"].map((t) => (
+            <li key={t} className="flex items-center gap-2.5">
+              <span aria-hidden className="size-1.5 bg-tan" />
+              {t}
+            </li>
+          ))}
+        </ul>
+      </aside>
     </main>
   );
 }

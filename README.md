@@ -93,6 +93,32 @@ Sign up, paste `https://github.com/fastapi/full-stack-fastapi-template`, and cli
 
 Full stack in Docker: `docker compose up --build` (api :8000, web :3000, Postgres with pgvector).
 
+## Bringing in code
+
+**Add repo** offers three sources:
+
+| Source | How it works |
+|---|---|
+| **GitHub** | Paste a public GitHub/GitLab/Bitbucket URL. Kept current automatically (see below). |
+| **Upload ZIP** | Drop a `.zip` (≤ 100 MB). The API reads it in memory, never extracting to disk: absolute paths, `..`, symlinks and encrypted entries are skipped and every read is size-capped (zip-bomb safe). |
+| **Local folder** | Pick a folder. The browser filters it first, so `node_modules`, `.git`, build output, secrets and binaries never leave the machine, shows the project name, file count, size and type, then zips and uploads the rest. |
+
+Uploads then show a **review** from the server: project type (Node.js, Python, Java, Go, Docker …), languages, likely entry points, and what was skipped and why. **Start indexing** runs a background job (`queued → processing → ready | failed`) with live progress; you can leave the page. A failed job can be **retried** without uploading again (the accepted files are kept for 24 h). Uploading the same project name again updates it in place and re-indexes only changed files. Each upload is scoped to its owner like any repo.
+
+Kept: source, `package.json`, `requirements.txt`, `pyproject.toml`, `pom.xml`, `Dockerfile`, CI and other config, `.env.example`. Skipped: dependencies and build output (`node_modules/`, `.git/`, `dist/`, `build/`, `.next/`, `coverage/`, `vendor/`, `target/` …), lockfiles, minified bundles, binaries and media, files over 400 KB, `.env` files and private keys.
+
+### CLI
+
+```bash
+curl -fsSL <API>/cli/sherpa.py -o ~/.local/bin/sherpa && chmod +x ~/.local/bin/sherpa   # or: pipx install ./cli
+sherpa login --api https://api.your-sherpa.app    # emails you a sign-in code (--password also works)
+sherpa upload ./my-project  # pack → review → index, with a progress bar
+sherpa ask <repo_id> "How does signup work?"
+sherpa status | repos | retry <job_id> | logout
+```
+
+Inside a git checkout the CLI sends only files git tracks or would track (so `.gitignore` is respected), applies the same filters, never follows symlinks, and re-uploading the same `--name` updates the project. The web app has the same guide, with commands filled in for your server, at `/cli` and under **Add repo → CLI** (which also shows CLI uploads live). After editing `cli/sherpa_cli.py`, run `make cli-sync` so the API serves the new version (a test fails until you do). Full guide: [`cli/README.md`](cli/README.md) (install, sign-in, options, CI use, limits, troubleshooting).
+
 ## Deploying
 
 - **Database:** AWS RDS for PostgreSQL (15.2+ has pgvector; ours is 18.3). Migrations run on API startup and enable the extension. See [`docs/rds_setup.md`](docs/rds_setup.md).
@@ -114,6 +140,9 @@ Every `/api/*` route except sign-up/login and the study protocol needs a signed-
 | `POST` | `/api/tasks` | Starter tasks grounded in code signals |
 | `POST` | `/api/docs/generate` · `/api/docs/refresh` | Create the onboarding guide · rewrite stale sections |
 | `GET` | `/api/docs/{repo_id}` · `/markdown` | Guide with per-section stale status · Markdown export |
+| `GET` | `/cli/sherpa.py` | The CLI, preset to this API (public) |
+| `POST` | `/api/uploads` | Multipart `file` (a `.zip`) + `name`, `origin` → job in `review` with a manifest (nothing indexed yet) |
+| `POST` · `GET` · `DELETE` | `/api/uploads/{job_id}[/start]` | Start (or retry) indexing · poll status/stage/progress · discard; `GET /api/uploads` lists your jobs |
 | `POST` | `/api/repos/{repo_id}/check` | Automatic re-index: compares the indexed commit with the remote's latest (`git ls-remote`, no clone, no quota). If it moved, only added/modified/removed files are re-chunked, re-embedded and rewritten → `up_to_date` · `updated` (+ `changes`) · `outdated` (busy/out of quota) · `error` |
 | `POST` | `/api/sync` | Re-index from source and refresh stale doc sections; `full: true` rebuilds the whole index (the **Reindex** button) |
 | `GET` | `/api/file` | Full text of a snapshot file (backs the citation viewer) |
@@ -163,6 +192,7 @@ Every `/api/*` route except sign-up/login and the study protocol needs a signed-
 | `RATE_LIMIT_PER_MINUTE` / `MAX_BODY_BYTES` | 60 / 1 MB | Per user per endpoint · request size |
 | `MAX_CONCURRENT_INGESTS` / `MAX_REPO_MB` / `CLONE_TIMEOUT_SECONDS` | 3 / 500 / 180 | Ingest limits |
 | `LLM_TIMEOUT_SECONDS` | 90 | Per model call |
+| `MAX_UPLOAD_MB` / `MAX_UPLOAD_SOURCE_MB` | 100 / 50 | Uploaded ZIP size · text kept after filtering |
 | `LOG_LEVEL` | `INFO` | Fallbacks log at `WARNING` |
 
 ## Project layout
@@ -171,6 +201,7 @@ Every `/api/*` route except sign-up/login and the study protocol needs a signed-
 services/api/app/
   main.py            routes, middleware (CORS, request id, body limit, security headers), ingest slots
   guards.py          rate limiter, SSRF checks for outbound URLs, git URL/branch validation
+  uploads.py         safe in-memory ZIP reading, manifest, background ingestion jobs
   prompts/system.md  mentor system prompt (persona, grounding and safety rules)
   llm.py             LLM client: default model + fallback chain + BYOK, JSON parsing
   ingest.py          clone/walk, secret & binary filtering, snapshot metadata
@@ -182,18 +213,19 @@ migrations/          Alembic schema migrations (run on startup)
   retrieval.py       newcomer phrasing → code vocabulary
   analysis.py        import graph, components, entrypoints, symbols, task signals
   agents/            common (verifier) · mentor (Q&A) · overview · tour · tasks · docs (living docs)
-  routers/           auth · keys (BYOK) · study (user study)
+  routers/           auth · keys (BYOK) · study (user study) · uploads
 apps/web/
   components/workspace/   one panel per feature + shared UI
   components/markdown.tsx citation-aware Markdown renderer
   components/code-viewer.tsx  drawer that opens cited lines
   components/study.tsx    user-study recorder
 evals/               golden questions, eval runner, results, study protocol
+cli/                 `sherpa` command: login, upload a folder, ask (stdlib only)
 ```
 
 ## Tests
 
-`make test` runs 55 backend tests: citation verification, import graph, living-docs staleness, LLM fallback chain, ingest safety, repo ownership, quotas, migrations, email codes, Google sign-in, tour call-following, production config checks, study API, and the production guardrails (SSRF, symlinks, git URL/branch validation, rate limits, ingest slots, body limits) and re-indexing (commit check, incremental vs full). They run offline and never call a paid model. `make eval` runs the live grounding eval. CI also builds the web app.
+`make test` runs 67 backend tests: citation verification, import graph, living-docs staleness, LLM fallback chain, ingest safety, repo ownership, quotas, migrations, email codes, Google sign-in, tour call-following, production config checks, study API, and the production guardrails (SSRF, symlinks, git URL/branch validation, rate limits, ingest slots, body limits) re-indexing (commit check, incremental vs full) and uploads (hostile ZIP entries, size caps, review → index, re-upload, retry, stale jobs, privacy). They run offline and never call a paid model. `make eval` runs the live grounding eval. CI also builds the web app.
 
 ## Tools, models and credits
 

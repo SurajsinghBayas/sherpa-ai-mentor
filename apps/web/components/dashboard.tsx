@@ -3,16 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 import {
-  AlertCircle, BookOpen, CheckCircle2, ChevronDown, FolderGit2, ListTodo, Map, MessageSquare,
-  Plus, RefreshCw, Route, Trash2,
+  AlertCircle, BookOpen, CheckCircle2, ChevronsUpDown, Command as CommandIcon, Ellipsis, FolderGit2, ListTodo,
+  Map, MessageSquare, Moon, Plus, RefreshCw, Route, Search, Trash2, Upload,
 } from "lucide-react";
 import { api, ApiError, type Health, type Repo } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { cn } from "../lib/utils";
 import { CodeViewerProvider } from "./code-viewer";
-import { SherpaOrb } from "./sherpa-orb";
-import { Badge, Button, Input } from "./ui/primitives";
+import { ImportSource } from "./import-source";
+import { CommandPalette, type PaletteItem } from "./command-palette";
+import { Sherpa } from "./sherpa";
+import { Button, ConfirmDialog, Kbd, Menu, Tooltip } from "./ui/primitives";
 import { AskPanel } from "./workspace/ask-panel";
 import { DocsPanel } from "./workspace/docs-panel";
 import { OverviewPanel } from "./workspace/overview-panel";
@@ -23,14 +26,13 @@ import { TourPanel } from "./workspace/tour-panel";
 type TabId = "ask" | "overview" | "tour" | "tasks" | "docs";
 
 const NAV: { id: TabId; icon: typeof Map; label: string; short: string; hint: string }[] = [
-  { id: "overview", icon: Map, label: "Architecture", short: "Map", hint: "Main parts & how they connect" },
-  { id: "ask", icon: MessageSquare, label: "Ask Sherpa", short: "Ask", hint: "How / why questions, cited" },
-  { id: "tour", icon: Route, label: "Code Tours", short: "Tours", hint: "Walk a flow step by step" },
-  { id: "tasks", icon: ListTodo, label: "Starter Tasks", short: "Tasks", hint: "Your first contribution" },
-  { id: "docs", icon: BookOpen, label: "Living Docs", short: "Docs", hint: "Onboarding guide, kept in sync" },
+  { id: "overview", icon: Map, label: "Architecture", short: "Map", hint: "Main parts and how they connect" },
+  { id: "ask", icon: MessageSquare, label: "Ask Sherpa", short: "Ask", hint: "How and why, with sources" },
+  { id: "tour", icon: Route, label: "Code tours", short: "Tours", hint: "Walk a flow step by step" },
+  { id: "tasks", icon: ListTodo, label: "Starter tasks", short: "Tasks", hint: "Your first contribution" },
+  { id: "docs", icon: BookOpen, label: "Living docs", short: "Docs", hint: "Onboarding guide, kept in sync" },
 ];
 
-const DEMO_REPO = "https://github.com/fastapi/full-stack-fastapi-template";
 const LAST_REPO_KEY = "sherpa.repo";
 const RECHECK_MS = 5 * 60_000; // while the tab is open
 const FOCUS_RECHECK_MS = 2 * 60_000; // when the user comes back to the tab
@@ -53,13 +55,13 @@ function FreshnessChip({ f }: { f: Freshness }) {
   if (f.state === "up_to_date")
     return (
       <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title="Matches the latest commit">
-        <CheckCircle2 className="size-3 text-emerald-500" /> up to date
+        <CheckCircle2 className="size-3 text-success" /> up to date
       </span>
     );
   if (f.state === "outdated" || f.state === "error")
     return (
       <span
-        className={cn("flex items-center gap-1 text-[11px]", f.state === "outdated" ? "text-amber-500" : "text-muted-foreground")}
+        className={cn("flex items-center gap-1 text-[11px]", f.state === "outdated" ? "text-warning" : "text-muted-foreground")}
         title={f.detail}
       >
         <AlertCircle className="size-3" /> {f.state === "outdated" ? "new commits" : "couldn't check"}
@@ -68,173 +70,139 @@ function FreshnessChip({ f }: { f: Freshness }) {
   return null;
 }
 
-function RepoBar({
+/** The repository switcher at the top of the sidebar (and of the page on phones). */
+function RepoSwitcher({
   repos,
   current,
   onSelect,
-  onIndexed,
-  onDeleted,
-  localAllowed,
-  freshness,
-  onReindex,
+  onAdd,
+  className,
 }: {
   repos: Repo[];
   current: Repo | null;
   onSelect: (r: Repo) => void;
-  onIndexed: (r: Repo) => void;
-  onDeleted: (r: Repo) => void;
-  localAllowed: boolean;
-  freshness: Freshness;
-  onReindex: () => void;
+  onAdd: () => void;
+  className?: string;
 }) {
-  const [adding, setAdding] = useState(!current);
-  const [source, setSource] = useState(current ? "" : DEMO_REPO);
-  const [indexing, setIndexing] = useState(false);
-  const [menu, setMenu] = useState(false);
-
-  useEffect(() => {
-    // show the "index a repo" box only when there is nothing to work on yet
-    setAdding(!current);
-    if (current) setSource("");
-  }, [current]);
-
-  async function index() {
-    const s = source.trim();
-    if (!s) return;
-    setIndexing(true);
-    try {
-      const isUrl = /^https?:\/\//.test(s);
-      const r = await api.ingest(isUrl ? { repo_url: s } : { local_path: s });
-      const n = (r.changes.added?.length || 0) + (r.changes.modified?.length || 0) + (r.changes.removed?.length || 0);
-      toast.success(`Indexed ${r.name}: ${r.files} files${n ? ` · ${n} changed since last index` : ""}`);
-      onIndexed(r);
-      setAdding(false);
-      setSource("");
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Indexing failed");
-    } finally {
-      setIndexing(false);
-    }
-  }
-
-  async function remove(r: Repo) {
-    if (!window.confirm(`Delete ${r.name}? Its index, overview, tasks and docs are removed.`)) return;
-    try {
-      await api.deleteRepo(r.repo_id);
-      toast.success(`Deleted ${r.name}`);
-      onDeleted(r);
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Delete failed");
-    }
-  }
-
   return (
-    <div className="border-b border-border bg-card/60 px-4 py-2.5">
-      <div className="flex items-center gap-3">
-        <FolderGit2 className="size-4 shrink-0 text-muted-foreground" />
-        <div className="relative min-w-0 flex-1">
-          {current ? (
-            <button
-              onClick={() => setMenu((v) => !v)}
-              className="flex max-w-full items-center gap-2 rounded-md px-1.5 py-1 hover:bg-secondary"
-            >
-              <span className="truncate text-sm font-medium">{current.name}</span>
-              <span className="hidden truncate font-mono text-[11px] text-muted-foreground md:inline">
-                {current.files} files{current.commit ? ` · ${shortSha(current.commit)}` : ""} · indexed {timeAgo(current.indexed_at)}
-              </span>
-              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-            </button>
-          ) : (
-            <span className="text-sm text-muted-foreground">No repository selected</span>
-          )}
-          {menu && (
-            <div className="absolute left-0 top-full z-40 mt-1 w-[min(28rem,90vw)] rounded-xl border border-border bg-popover p-1 shadow-xl">
-              {repos.map((r) => (
-                <div
-                  key={r.repo_id}
-                  className={cn("group flex items-center rounded-lg hover:bg-secondary", r.repo_id === current?.repo_id && "bg-secondary")}
-                >
-                  <button
-                    onClick={() => {
-                      onSelect(r);
-                      setMenu(false);
-                    }}
-                    className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm"
-                  >
-                    <span className="min-w-0 flex-1 truncate">{r.name}</span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">{r.files} files</span>
-                    {r.has_docs && <BookOpen className="size-3 shrink-0 text-muted-foreground" />}
-                  </button>
-                  <button
-                    onClick={() => remove(r)}
-                    title={`Delete ${r.name}`}
-                    aria-label={`Delete ${r.name}`}
-                    className="mr-1 rounded-md p-1.5 text-muted-foreground opacity-60 hover:bg-destructive/15 hover:text-destructive hover:opacity-100 group-hover:opacity-100"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={() => {
-                  setAdding(true);
-                  setMenu(false);
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                <Plus className="size-3.5" /> Index another repository
-              </button>
-            </div>
-          )}
+    <Menu.Root>
+      <Menu.Trigger
+        className={cn(
+          "flex w-full items-center gap-2.5 rounded-lg border border-border bg-card px-2.5 py-2 text-left shadow-card",
+          "transition-colors duration-150 hover:bg-secondary data-[popup-open]:bg-secondary",
+          className
+        )}
+      >
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+          <FolderGit2 className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-medium">{current ? current.name : "No repository"}</span>
+          <span className="block truncate text-[11px] text-muted-foreground">
+            {current ? `${current.files} files · ${timeAgo(current.indexed_at) || "indexed"}` : "Add one to begin"}
+          </span>
+        </span>
+        <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+      </Menu.Trigger>
+      <Menu.Popup className="w-[min(18rem,calc(100vw-2rem))]">
+        {repos.length > 0 && <Menu.Label>Repositories</Menu.Label>}
+        <div className="scroll-thin max-h-72 overflow-y-auto">
+          {repos.map((r) => (
+            <Menu.Item key={r.repo_id} onClick={() => onSelect(r)} className={cn(r.repo_id === current?.repo_id && "bg-secondary/60")}>
+              <FolderGit2 />
+              <span className="min-w-0 flex-1 truncate">{r.name}</span>
+              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{r.files}</span>
+            </Menu.Item>
+          ))}
         </div>
-        {current && (
-          <div className="hidden shrink-0 sm:block">
-            <FreshnessChip f={freshness} />
-          </div>
-        )}
-        {current && current.kind !== "self" && (
-          <Button
-            size="sm"
-            variant={freshness.state === "outdated" ? "outline" : "ghost"}
-            onClick={onReindex}
-            disabled={freshness.state === "reindexing" || freshness.state === "checking"}
-            title="Rebuild the whole index from the latest code"
-          >
-            <RefreshCw className={cn("size-3.5", freshness.state === "reindexing" && "animate-spin")} />
-            <span className="hidden md:inline">{freshness.state === "reindexing" ? "Reindexing…" : "Reindex"}</span>
-          </Button>
-        )}
-        {current && !adding && (
-          <Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
-            <Plus className="size-3.5" /> <span className="hidden md:inline">Add repo</span>
-          </Button>
+        {repos.length > 0 && <Menu.Separator />}
+        <Menu.Item onClick={onAdd}>
+          <Plus /> Add a repository
+        </Menu.Item>
+      </Menu.Popup>
+    </Menu.Root>
+  );
+}
+
+/** The bar above the panels: what is open, how fresh it is, and what you can do with it. */
+function RepoBar({
+  current,
+  freshness,
+  adding,
+  onAdd,
+  onReindex,
+  onDelete,
+  onPalette,
+}: {
+  current: Repo | null;
+  freshness: Freshness;
+  adding: boolean;
+  onAdd: () => void;
+  onReindex: () => void;
+  onDelete: () => void;
+  onPalette: () => void;
+}) {
+  const canReindex = current && current.kind !== "self" && current.kind !== "upload";
+  return (
+    <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {current ? (
+          <>
+            <h1 className="hidden truncate text-sm font-semibold sm:block">{current.name}</h1>
+            <span className="hidden truncate font-mono text-[11px] text-muted-foreground md:inline">
+              {current.commit ? shortSha(current.commit) : current.kind}
+            </span>
+            <span className="hidden sm:block">
+              <FreshnessChip f={freshness} />
+            </span>
+          </>
+        ) : (
+          <h1 className="text-sm font-semibold">Add a repository</h1>
         )}
       </div>
-      {adding && (
-        <div className="mt-2.5 flex gap-2">
-          <Input
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            placeholder={localAllowed ? "https://github.com/org/repo  or  /path/to/local/folder" : "https://github.com/org/repo"}
-            className="flex-1 font-mono text-xs"
-            onKeyDown={(e) => e.key === "Enter" && !indexing && index()}
-            autoFocus
-          />
-          <Button onClick={index} disabled={indexing || !source.trim()} size="sm" className="h-9 shrink-0">
-            {indexing ? (
-              <span className="flex items-center gap-1.5" title="The first index embeds every chunk — about a minute for a mid-size repo">
-                <Dots /> Indexing
-              </span>
-            ) : (
-              "Index repo"
-            )}
-          </Button>
-          {current && (
-            <Button variant="ghost" size="sm" className="h-9" onClick={() => setAdding(false)}>
-              Cancel
-            </Button>
-          )}
-        </div>
+
+      <Tooltip content={<span className="flex items-center gap-1.5">Command menu <Kbd className="border-white/20 bg-transparent text-inherit">⌘K</Kbd></span>} side="bottom">
+        <Button variant="outline" size="sm" onClick={onPalette} aria-label="Open the command menu" className="hidden gap-2 text-muted-foreground md:inline-flex">
+          <Search className="size-3.5" /> Search <Kbd>⌘K</Kbd>
+        </Button>
+      </Tooltip>
+
+      {current && current.kind === "upload" && !adding && (
+        <Button size="sm" variant="outline" onClick={onAdd} title="Upload a new version; only changed files are re-indexed">
+          <Upload className="size-3.5" /> <span className="hidden lg:inline">Upload new version</span>
+        </Button>
+      )}
+      {canReindex && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onReindex}
+          disabled={freshness.state === "reindexing" || freshness.state === "checking"}
+          title="Rebuild the whole index from the latest code"
+          className={cn(freshness.state === "outdated" && "border-warning/40 text-warning")}
+        >
+          <RefreshCw className={cn("size-3.5", freshness.state === "reindexing" && "animate-spin")} />
+          <span className="hidden lg:inline">{freshness.state === "reindexing" ? "Reindexing…" : "Reindex"}</span>
+        </Button>
+      )}
+      {current && (
+        <Menu.Root>
+          <Menu.Trigger
+            aria-label="More actions"
+            className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[popup-open]:bg-secondary"
+          >
+            <Ellipsis className="size-4" />
+          </Menu.Trigger>
+          <Menu.Popup align="end" className="w-56">
+            <Menu.Item onClick={onAdd}>
+              <Plus /> Add a repository
+            </Menu.Item>
+            <Menu.Separator />
+            <Menu.Item onClick={onDelete} className="text-destructive [&_svg]:text-destructive">
+              <Trash2 /> Delete {current.name}
+            </Menu.Item>
+          </Menu.Popup>
+        </Menu.Root>
       )}
     </div>
   );
@@ -252,6 +220,10 @@ export function Dashboard() {
   const [tourSeed, setTourSeed] = useState("");
   const [freshness, setFreshness] = useState<Freshness>({ state: "idle" });
   const [indexRev, setIndexRev] = useState(0); // bumps when the index changes → map & tasks reload
+  const [adding, setAdding] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
   const currentRef = useRef<Repo | null>(null);
   const lastCheck = useRef<{ id: string; at: number } | null>(null);
   const inFlight = useRef(false);
@@ -282,6 +254,32 @@ export function Dashboard() {
     loadRepos();
     api.health().then(setHealth).catch(() => setHealth(null));
   }, [user, loadRepos]);
+
+  useEffect(() => {
+    // show the importer only when there is nothing to work on yet
+    setAdding(!current);
+  }, [current?.repo_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!user) return;
+    // an upload still indexing (reload, other tab, CLI): reopen the importer to show it
+    api.uploads()
+      .then(({ uploads }) => uploads.some((u) => u.status === "queued" || u.status === "processing") && setAdding(true))
+      .catch(() => {});
+  }, [user]);
+
+  async function removeCurrent() {
+    const r = currentRef.current;
+    if (!r) return;
+    try {
+      await api.deleteRepo(r.repo_id);
+      toast.success(`Deleted ${r.name}`);
+      setCurrent(null);
+      loadRepos();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Delete failed");
+    }
+  }
 
   /** Automatic re-index: the server compares commits and re-indexes only changed files. */
   const checkForUpdates = useCallback(
@@ -388,9 +386,9 @@ export function Dashboard() {
 
   if (loading || !user) {
     return (
-      <main className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <SherpaOrb size="lg" state="thinking" />
+      <main className="flex h-[calc(100dvh-3.5rem)] items-center justify-center">
+        <div className="flex flex-col items-center gap-3" role="status">
+          <Sherpa pose="walking" size={80} decorative />
           <p className="text-sm text-muted-foreground">Loading your workspace…</p>
         </div>
       </main>
@@ -398,82 +396,126 @@ export function Dashboard() {
   }
 
   const repoId = current?.repo_id || "";
+  const model = health?.llm.available ? health.llm.model.replace(/^[a-z0-9-]+\./i, "") : null;
+
+  const paletteItems: PaletteItem[] = [
+    ...NAV.map(({ id, icon: Icon, label, hint }) => ({
+      id: `tab-${id}`,
+      group: "Go to",
+      label,
+      hint,
+      icon: <Icon />,
+      run: () => setTab(id),
+    })),
+    ...repos.map((r) => ({
+      id: `repo-${r.repo_id}`,
+      group: "Repositories",
+      label: r.name,
+      hint: r.repo_id === repoId ? "open" : `${r.files} files`,
+      icon: <FolderGit2 />,
+      run: () => select(r),
+    })),
+    { id: "add", group: "Actions", label: "Add a repository", icon: <Plus />, run: () => setAdding(true) },
+    ...(current && current.kind !== "self" && current.kind !== "upload"
+      ? [{ id: "reindex", group: "Actions", label: `Reindex ${current.name}`, icon: <RefreshCw />, run: reindex }]
+      : []),
+    {
+      id: "theme",
+      group: "Actions",
+      label: resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme",
+      icon: <Moon />,
+      run: () => setTheme(resolvedTheme === "dark" ? "light" : "dark"),
+    },
+  ];
+
   return (
     <CodeViewerProvider repoId={repoId}>
-      <div className="flex h-[calc(100vh-3.5rem)]">
-        <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card/40 sm:flex">
-          <div className="flex items-center gap-3 border-b border-border px-4 py-5">
-            <SherpaOrb size="sm" state={busy ? "thinking" : "idle"} />
-            <div>
-              <p className="text-sm font-semibold">Sherpa</p>
-              <p className="text-[10px] text-muted-foreground">AI codebase mentor</p>
-            </div>
+      <div className="flex h-[calc(100dvh-3.5rem)]">
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card sm:flex">
+          <div className="p-3">
+            <RepoSwitcher repos={repos} current={current} onSelect={select} onAdd={() => setAdding(true)} />
           </div>
-          <nav className="flex-1 space-y-0.5 p-2 pt-3">
+          <nav aria-label="Workspace" className="flex-1 space-y-0.5 px-3 py-1">
             {NAV.map(({ id, icon: Icon, label, hint }) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}
+                aria-current={tab === id ? "page" : undefined}
                 className={cn(
-                  "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-150",
-                  tab === id ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                  "group flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors duration-150",
+                  tab === id ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
                 )}
               >
-                <Icon className="mt-0.5 size-4 shrink-0" />
-                <span>
-                  <span className="block text-sm font-medium">{label}</span>
-                  <span className="block text-[10px] text-muted-foreground">{hint}</span>
+                <Icon className={cn("mt-0.5 size-4 shrink-0", tab === id && "text-primary")} />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium">{label}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{hint}</span>
                 </span>
               </button>
             ))}
           </nav>
-          {health && (
-            <div className="border-t border-border p-3 text-[10px] text-muted-foreground">
-              {health.llm.available ? (
-                <Badge variant="secondary" className="w-full justify-center font-normal" title={`Fallbacks: ${health.llm.fallbacks.join(", ")}`}>
-                  model: {health.llm.model.replace(/^[a-z0-9-]+\./i, "")}
-                </Badge>
-              ) : (
-                <Badge variant="warning" className="w-full justify-center">offline mode — no LLM key</Badge>
+
+          {/* Sherpa's status: what the guide is doing right now */}
+          <div className="m-3 flex items-center gap-3 rounded-lg border border-border bg-background p-2.5">
+            <Sherpa pose={busy ? "thinking" : current ? "happy" : "guide"} size={48} decorative />
+            <div className="min-w-0 text-[11px] leading-snug">
+              <p className="font-medium text-foreground">{busy ? "Working on it…" : current ? "Ready when you are" : "Waiting for code"}</p>
+              {health && (
+                <p className={cn("truncate", model ? "text-muted-foreground" : "text-warning")} title={model ? `Fallbacks: ${health.llm.fallbacks.join(", ")}` : undefined}>
+                  {model ? `Model: ${model}` : "Offline mode, no model key"}
+                </p>
               )}
-            </div>
-          )}
-          <div className="border-t border-border px-3 py-3">
-            <div className="flex items-center gap-2.5 px-1">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium uppercase">
-                {(user.name || user.email).slice(0, 1)}
-              </div>
-              <p className="min-w-0 truncate text-xs font-medium">{user.name || user.email}</p>
+              <button onClick={() => setPalette(true)} className="mt-0.5 hidden items-center gap-1 text-muted-foreground hover:text-foreground md:flex">
+                <CommandIcon className="size-3" /> K for commands
+              </button>
             </div>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {/* phones: switcher + tabs instead of the sidebar */}
+          <div className="border-b border-border bg-card p-2 sm:hidden">
+            <RepoSwitcher repos={repos} current={current} onSelect={select} onAdd={() => setAdding(true)} className="shadow-none" />
+          </div>
+
           <RepoBar
-            repos={repos}
             current={current}
-            onSelect={select}
-            onIndexed={(r) => {
-              select(r);
-              loadRepos(r.repo_id);
-            }}
-            onDeleted={(r) => {
-              if (r.repo_id === current?.repo_id) setCurrent(null);
-              loadRepos();
-            }}
-            localAllowed={!!health?.local_ingest}
             freshness={freshness}
+            adding={adding}
+            onAdd={() => setAdding(true)}
             onReindex={reindex}
+            onDelete={() => setConfirmDelete(true)}
+            onPalette={() => setPalette(true)}
           />
 
-          <div className="flex border-b border-border bg-card/40 px-1 sm:hidden">
+          {adding && (
+            <div className="scroll-thin max-h-[70dvh] shrink-0 overflow-y-auto border-b border-border bg-card px-4 pb-4">
+              <ImportSource
+                localAllowed={!!health?.local_ingest}
+                onIndexed={(id) => {
+                  setAdding(false);
+                  try {
+                    localStorage.setItem(LAST_REPO_KEY, id);
+                  } catch {
+                    /* ignore */
+                  }
+                  loadRepos(id);
+                }}
+                onCancel={current ? () => setAdding(false) : undefined}
+              />
+            </div>
+          )}
+
+          <div role="tablist" aria-label="Panels" className="no-scrollbar flex border-b border-border bg-card px-1 sm:hidden">
             {NAV.map(({ id, icon: Icon, short }) => (
               <button
                 key={id}
+                role="tab"
+                aria-selected={tab === id}
                 onClick={() => setTab(id)}
                 className={cn(
-                  "flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium",
-                  tab === id ? "text-foreground" : "text-muted-foreground"
+                  "flex flex-1 flex-col items-center gap-0.5 border-b-2 py-2 text-[11px] font-medium",
+                  tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground"
                 )}
               >
                 <Icon className="size-4" />
@@ -505,6 +547,15 @@ export function Dashboard() {
           ))}
         </div>
       </div>
+
+      <CommandPalette open={palette} onOpenChange={setPalette} items={paletteItems} onAsk={repoId ? askAbout : undefined} />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${current?.name ?? "this repository"}?`}
+        description="Its index, architecture map, tasks and docs are removed. You can import it again later."
+        onConfirm={removeCurrent}
+      />
     </CodeViewerProvider>
   );
 }

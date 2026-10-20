@@ -45,6 +45,7 @@ class SqlBackend:
         # repo_chunks.ord of each loaded chunk, in list order. Incremental re-indexes leave
         # gaps (removed files) and append new ords, so ord is not the list index.
         self._ord_index: Dict[int, int] = {}
+        self.on_progress = None  # optional (stage, done, total): "saving" rows, then "embedding"
 
     # ---------- snapshot ----------
 
@@ -97,6 +98,8 @@ class SqlBackend:
                 for i, (c, h) in enumerate(zip(chunks, hashes))]
         for i in range(0, len(rows), BATCH):
             db.execute(insert(RepoChunk), rows[i:i + BATCH])
+            if self.on_progress:
+                self.on_progress("saving", min(i + BATCH, len(rows)), len(rows))
         frows = [{"repo_id": self.repo_id, "path": p, "hash": file_hash(t), "text": t}
                  for p, t in sources.items()]
         for i in range(0, len(frows), BATCH):
@@ -166,11 +169,14 @@ class SqlBackend:
                 todo.setdefault(h, embed_input(c))
         if not todo:
             log.info("embeddings: repo %s — all %d chunks already embedded", self.repo_id, len(chunks))
+            if self.on_progress:
+                self.on_progress("embedding", 1, 1)
             return
         t0 = time.time()
         items = list(todo.items())
         try:
-            vectors = embedder.embed_documents([t for _, t in items])
+            report = (lambda d, t: self.on_progress("embedding", d, t)) if self.on_progress else None
+            vectors = embedder.embed_documents([t for _, t in items], on_progress=report)
         except Exception as e:  # noqa: BLE001
             log.warning("embeddings: failed for repo %s (%s); FALLBACK to TF-IDF search",
                         self.repo_id, e)

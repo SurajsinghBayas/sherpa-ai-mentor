@@ -1,4 +1,4 @@
-.PHONY: api web dev test lint eval ingest ask refresh-docs
+.PHONY: api web dev test lint eval ingest ask refresh-docs cli-sync
 
 API_DIR=services/api
 WEB_DIR=apps/web
@@ -27,3 +27,7 @@ ingest:
 
 refresh-docs:
 	@echo "POST /api/freshness with your docs markdown to detect stale sections (see docs/demo_script.md)"
+
+# the API serves the CLI at /cli/sherpa.py from its own copy (Docker only sees services/api)
+cli-sync:
+	cp cli/sherpa_cli.py services/api/app/static/sherpa_cli.py

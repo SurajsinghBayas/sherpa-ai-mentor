@@ -30,7 +30,7 @@ const components: Components = {
       if (file) return <CitationChip file={decodeURIComponent(file)} start={+a} end={+b} compact />;
     }
     return (
-      <a href={href} target="_blank" rel="noreferrer" className="font-medium text-sky-600 underline-offset-2 hover:underline dark:text-sky-400">
+      <a href={href} target="_blank" rel="noreferrer" className="font-medium text-primary underline-offset-2 hover:underline">
         {children}
       </a>
     );
@@ -45,7 +45,7 @@ const components: Components = {
   li: ({ children }) => <li className="pl-1 leading-relaxed">{children}</li>,
   strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
   blockquote: ({ children }) => (
-    <blockquote className="my-3 border-l-2 border-amber-500/50 bg-amber-500/5 py-1 pl-3 text-muted-foreground">
+    <blockquote className="my-3 border-l-2 border-tan bg-tan/10 py-1 pl-3 text-muted-foreground">
       {children}
     </blockquote>
   ),
@@ -58,7 +58,7 @@ const components: Components = {
   th: ({ children }) => <th className="border-b border-border bg-secondary/60 px-3 py-2 font-medium">{children}</th>,
   td: ({ children }) => <td className="border-b border-border/60 px-3 py-2 align-top">{children}</td>,
   pre: ({ children }) => (
-    <pre className="code-scroll my-3 overflow-x-auto rounded-lg border border-border bg-black/60 p-3 font-mono text-[12px] leading-relaxed text-zinc-200">
+    <pre className="scroll-thin-code my-3 overflow-x-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-relaxed text-code-foreground">
       {children}
     </pre>
   ),

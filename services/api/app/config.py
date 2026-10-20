@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     max_repo_mb: int = 500                # clone size cap (checked after clone, before indexing)
     clone_timeout_seconds: int = 180
 
+    # Uploaded codebases (ZIP / folder / CLI)
+    max_upload_mb: int = 100              # size of the uploaded ZIP
+    max_upload_source_mb: int = 50        # text kept after filtering (what gets indexed)
+
     # LLM guardrails
     llm_timeout_seconds: int = 90         # per model call; fallbacks each get their own
 
