@@ -22,3 +22,7 @@ coverage/
 .nyc_output/
 
 *.tsbuildinfo
+apps/web/out-desktop/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+apps/web/.desktop-build/

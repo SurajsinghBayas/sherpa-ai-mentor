@@ -261,7 +261,7 @@ export function Settings() {
             </div>
 
             <div className="sm:col-span-2">
-              <Button disabled={keyBusy} className="w-full">
+              <Button type="submit" disabled={keyBusy} className="w-full">
                 {keyBusy ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
@@ -387,7 +387,7 @@ export function Settings() {
                 )}
                 Test connection
               </Button>
-              <Button disabled={epBusy} className="flex-1">
+              <Button type="submit" disabled={epBusy} className="flex-1">
                 {epBusy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
                 {epBusy ? "Saving…" : "Add endpoint"}
               </Button>

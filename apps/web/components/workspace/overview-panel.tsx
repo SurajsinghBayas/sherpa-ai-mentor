@@ -1,27 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Boxes, DoorOpen, Map, RefreshCw, Route } from "lucide-react";
+import { ArrowRight, Map, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError, type Overview } from "../../lib/api";
 import { CitationChip } from "../code-viewer";
 import { Markdown } from "../markdown";
 import { MermaidDiagram } from "../mermaid-diagram";
-import { Badge, Button } from "../ui/primitives";
+import { Button } from "../ui/primitives";
 import { cn } from "../../lib/utils";
 import { EmptyState, FadeIn, ModeBadge, SectionLabel, VerifiedBadge } from "./shared";
 
-const LAYER_TONE: Record<string, string> = {
-  frontend: "border-l-primary",
-  backend: "border-l-navy dark:border-l-sky-brand",
-  api: "border-l-sky-brand dark:border-l-primary",
-  data: "border-l-tan",
-  infra: "border-l-bark",
-  tooling: "border-l-muted-foreground/40",
-  docs: "border-l-muted-foreground/40",
-  tests: "border-l-muted-foreground/40",
-  shared: "border-l-muted-foreground/40",
+/* the layer is marked with a small square in a brand colour, next to its name */
+const LAYER_DOT: Record<string, string> = {
+  frontend: "bg-primary",
+  backend: "bg-navy dark:bg-sky-brand",
+  api: "bg-primary/45 dark:bg-sky-brand",
+  data: "bg-tan",
+  infra: "bg-bark",
 };
+
+const LAYER_LABEL: Record<string, string> = { api: "API", ui: "UI" };
+
+function uniqueFiles<T extends { file: string }>(files: T[]): T[] {
+  const seen = new Set<string>();
+  return files.filter((f) => !seen.has(f.file) && seen.add(f.file));
+}
 
 export function OverviewPanel({
   repoId,
@@ -78,14 +82,10 @@ export function OverviewPanel({
               <RefreshCw className={cn("size-3.5", busy === "overview" && "animate-spin")} /> Regenerate
             </Button>
           </div>
-          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] tabular-nums text-muted-foreground">
-            <Badge variant="outline" className="font-normal">{data.stats.files} files</Badge>
-            <Badge variant="outline" className="font-normal">{data.components.length} components</Badge>
-            <Badge variant="outline" className="font-normal">{data.stats.imports} resolved imports</Badge>
-            {data.stats.languages.slice(0, 5).map((l) => (
-              <Badge key={l} variant="outline" className="font-normal">{l}</Badge>
-            ))}
-          </div>
+          <p className="mt-1.5 text-[13px] tabular-nums text-muted-foreground">
+            {data.stats.files} files · {data.components.length} components · {data.stats.imports} resolved imports
+            {data.stats.languages.length > 0 && <> · {data.stats.languages.slice(0, 5).join(", ")}</>}
+          </p>
           <div className="mt-4 rounded-xl border border-border bg-card p-4">
             <Markdown text={data.summary} />
           </div>
@@ -103,27 +103,28 @@ export function OverviewPanel({
           <SectionLabel>Components</SectionLabel>
           <div className="grid gap-3 md:grid-cols-2">
             {data.components.map((c) => (
-              <div
-                key={c.key}
-                className={cn("rounded-xl border border-l-4 border-border bg-card p-4", LAYER_TONE[c.layer] || LAYER_TONE.shared)}
-              >
-                <div className="flex items-start gap-2">
-                  <Boxes className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{c.name}</p>
-                    <p className="truncate font-mono text-[11px] text-muted-foreground">
-                      {c.key}/ · {c.files_count} file{c.files_count === 1 ? "" : "s"}
-                    </p>
+              <article key={c.key} className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
+                <div className="p-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h4 className="min-w-0 truncate text-[15px] font-semibold">{c.name}</h4>
+                    <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                      <span aria-hidden className={cn("size-2", LAYER_DOT[c.layer] || "bg-muted-foreground/40")} />
+                      {LAYER_LABEL[c.layer] ?? c.layer.charAt(0).toUpperCase() + c.layer.slice(1)}
+                    </span>
                   </div>
-                  <Badge variant="outline" className="shrink-0 font-normal">{c.layer}</Badge>
+                  <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                    {c.key === "(root)" ? "repository root" : `${c.key}/`} · {c.files_count} file{c.files_count === 1 ? "" : "s"}
+                  </p>
+                  <Markdown text={c.description} className="mt-3 text-[13px] text-muted-foreground" />
                 </div>
-                <Markdown text={c.description} className="mt-2 text-[13px] text-muted-foreground" />
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {c.key_files.map((f) => (
-                    <CitationChip key={f.file} file={f.file} start={f.start_line} end={f.end_line} compact />
-                  ))}
-                </div>
-              </div>
+                {c.key_files.length > 0 && (
+                  <div className="mt-auto border-t border-border py-1">
+                    {uniqueFiles(c.key_files).map((f) => (
+                      <CitationChip key={f.file} file={f.file} start={f.start_line} end={f.end_line} variant="row" />
+                    ))}
+                  </div>
+                )}
+              </article>
             ))}
           </div>
         </FadeIn>
@@ -134,9 +135,8 @@ export function OverviewPanel({
               <SectionLabel>Key flows to trace</SectionLabel>
               <div className="space-y-2">
                 {data.flows.map((f) => (
-                  <div key={f.name} className="rounded-xl border border-border bg-card p-4">
+                  <div key={f.name} className="rounded-lg border border-border bg-card p-4">
                     <div className="flex items-center gap-2">
-                      <Route className="size-4 shrink-0 text-muted-foreground" />
                       <p className="flex-1 font-medium">{f.name}</p>
                       <Button size="sm" variant="outline" onClick={() => onTour(f.name)}>
                         Tour it <ArrowRight className="size-3.5" />
@@ -150,27 +150,24 @@ export function OverviewPanel({
           )}
           <FadeIn delay={0.2}>
             <SectionLabel>Start reading here</SectionLabel>
-            <div className="space-y-2">
-              {data.start_here.map((s) => (
-                <div key={s.file} className="rounded-xl border border-border bg-card p-4">
-                  <div className="flex items-center gap-2">
-                    <DoorOpen className="size-4 shrink-0 text-muted-foreground" />
-                    <CitationChip file={s.file} start={s.start_line} end={s.end_line} />
-                  </div>
-                  {s.why && <p className="mt-1.5 text-[13px] text-muted-foreground">{s.why}</p>}
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              {uniqueFiles(data.start_here).map((s, i) => (
+                <div key={s.file} className={cn("py-1.5", i > 0 && "border-t border-border")}>
+                  <CitationChip file={s.file} start={s.start_line} end={s.end_line} variant="row" />
+                  {s.why && <p className="px-3 pb-1.5 pl-[2.125rem] text-[13px] text-muted-foreground">{s.why}</p>}
                 </div>
               ))}
-              {data.entrypoints.length > 0 && (
-                <div className="rounded-xl border border-dashed border-border p-4">
-                  <p className="mb-2 text-xs font-medium text-muted-foreground">Detected entrypoints</p>
-                  <div className="flex flex-wrap gap-1">
-                    {data.entrypoints.map((e) => (
-                      <CitationChip key={e.file} file={e.file} start={e.line} end={e.line + 10} compact />
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
+            {data.entrypoints.length > 0 && (
+              <>
+                <SectionLabel className="mt-5">Entry points</SectionLabel>
+                <div className="overflow-hidden rounded-lg border border-border bg-card py-1">
+                  {uniqueFiles(data.entrypoints).map((e) => (
+                    <CitationChip key={e.file} file={e.file} start={e.line} end={e.line + 10} variant="row" />
+                  ))}
+                </div>
+              </>
+            )}
           </FadeIn>
         </div>
       </div>

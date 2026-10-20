@@ -33,6 +33,13 @@
     --code-foreground: 36 60% 92%;
     --code-muted: 222 15% 50%;
     --code-line: 215 84% 56%;
+
+    /* source viewer: follows the theme (light paper here, deep charcoal in dark) */
+    --editor: 40 33% 99%;            /* #FDFCFA */
+    --editor-foreground: 220 13% 14%;
+    --editor-gutter: 223 9% 62%;
+    --editor-border: 36 22% 88%;
+    --editor-hit: 214 85% 95.5%;     /* cited lines: solid, so the sticky gutter can share it */
   }
 
   .dark {
@@ -63,6 +70,12 @@
     --code-foreground: 36 45% 90%;
     --code-muted: 222 18% 55%;
     --code-line: 214 89% 66%;
+
+    --editor: 228 10% 6.5%;          /* #0F1013, a step below the page */
+    --editor-foreground: 210 20% 90%;
+    --editor-gutter: 225 6% 38%;
+    --editor-border: 225 9% 15%;
+    --editor-hit: 217 38% 13%;
   }
 
   * {
@@ -151,6 +164,10 @@
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 }
+
+/* shiki tokens carry both theme colours; pick one by the active theme */
+.shiki-t { color: var(--shiki-light); }
+.dark .shiki-t { color: var(--shiki-dark); }
 
 /* inline code in prose */
 code:not([class]) {

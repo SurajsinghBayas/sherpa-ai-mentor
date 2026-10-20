@@ -2,7 +2,10 @@
 
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { isValidElement } from "react";
 import { CitationChip } from "./code-viewer";
+import { CodeSnippet } from "./source-code";
+import { fenceLang } from "../lib/highlight";
 import { cn } from "../lib/utils";
 
 // [path/to/file.py:12-30] → a markdown link with a cite: href, rendered as a chip.
@@ -27,7 +30,7 @@ const components: Components = {
   a({ href, children }) {
     if (href?.startsWith("cite:")) {
       const [, file, a, b] = href.match(/^cite:(.+):(\d+):(\d+)$/) || [];
-      if (file) return <CitationChip file={decodeURIComponent(file)} start={+a} end={+b} compact />;
+      if (file) return <CitationChip file={decodeURIComponent(file)} start={+a} end={+b} variant="inline" />;
     }
     return (
       <a href={href} target="_blank" rel="noreferrer" className="font-medium text-primary underline-offset-2 hover:underline">
@@ -57,11 +60,12 @@ const components: Components = {
   ),
   th: ({ children }) => <th className="border-b border-border bg-secondary/60 px-3 py-2 font-medium">{children}</th>,
   td: ({ children }) => <td className="border-b border-border/60 px-3 py-2 align-top">{children}</td>,
-  pre: ({ children }) => (
-    <pre className="scroll-thin-code my-3 overflow-x-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-relaxed text-code-foreground">
-      {children}
-    </pre>
-  ),
+  pre: ({ children }) => {
+    // react-markdown hands us <pre><code class="language-x">…</code></pre>
+    const child = isValidElement<{ className?: string; children?: React.ReactNode }>(children) ? children : null;
+    const lang = /language-([\w+#-]+)/.exec(child?.props.className || "")?.[1]?.toLowerCase() ?? null;
+    return <CodeSnippet code={String(child?.props.children ?? "")} lang={fenceLang(lang)} className="my-3" />;
+  },
   code({ className, children }) {
     const block = /language-/.test(className || "") || String(children).includes("\n");
     if (block) return <code className={className}>{children}</code>;

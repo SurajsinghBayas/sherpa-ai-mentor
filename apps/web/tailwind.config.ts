@@ -29,6 +29,13 @@ const config: Config = {
         warning: token("warning"),
         /* code surfaces stay navy in both themes, like the brand's dark card */
         code: { DEFAULT: token("code"), foreground: token("code-foreground"), muted: token("code-muted"), line: token("code-line") },
+        editor: {
+          DEFAULT: token("editor"),
+          foreground: token("editor-foreground"),
+          gutter: token("editor-gutter"),
+          border: token("editor-border"),
+          hit: token("editor-hit"),
+        },
         /* brand palette (style guide) */
         navy: { DEFAULT: "#17223D", deep: "#101827" },
         sky: { brand: "#A9D5FF" },

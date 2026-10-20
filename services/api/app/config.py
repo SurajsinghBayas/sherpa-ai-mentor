@@ -70,6 +70,17 @@ class Settings(BaseSettings):
     embedding_dim: int = 1024
     embedding_concurrency: int = 16
 
+    # spoken explanations (Amazon Polly). Needs IAM keys with polly:SynthesizeSpeech — the
+    # Bedrock API key can't sign Polly calls. Blank keys → boto3's usual chain (env, ~/.aws, role);
+    # no credentials → the web app uses the browser's own voice.
+    polly_enabled: bool = True
+    polly_access_key_id: str = ""
+    polly_secret_access_key: str = ""
+    polly_region: str = ""          # blank → aws_default_region
+    polly_voice: str = "Ruth"
+    # neural starts speaking in ~0.5s; generative sounds richer but takes ~2-3s per sentence
+    polly_engine: str = "neural"    # neural | generative | standard; generative falls back to neural
+
     # email one-time codes (Gmail SMTP with an app password)
     smtp_host: str = ""
     smtp_port: int = 587
@@ -95,6 +106,9 @@ class Settings(BaseSettings):
 
     # CORS — comma-separated allowed origins; "*" allows all (dev only)
     allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # The desktop app's own origins (Tauri 2): tauri://localhost on macOS/Linux, http(s)://tauri.localhost
+    # on Windows. Browsers can't send these, so they are allowed alongside the https-only web origins.
+    desktop_origins: str = "tauri://localhost,http://tauri.localhost,https://tauri.localhost"
 
     # Rate limiting — requests per minute per user (or IP) per endpoint; auth routes are
     # stricter (see routers/auth.py). Off only for tests.

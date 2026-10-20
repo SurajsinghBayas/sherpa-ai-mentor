@@ -240,3 +240,11 @@ def test_cli_is_served_preset_to_this_server(client):
     if os.path.exists(src):
         with open(src) as a, open(os.path.join(here, "..", "app", "static", "sherpa_cli.py")) as b:
             assert a.read() == b.read(), "bundled CLI is out of date: run `make cli-sync`"
+
+
+def test_desktop_app_origin_allowed(client):
+    """The Tauri app (tauri://localhost) can call the API; an unknown origin can't."""
+    ok = client.options("/api/health", headers={"Origin": "tauri://localhost", "Access-Control-Request-Method": "GET"})
+    assert ok.headers.get("access-control-allow-origin") == "tauri://localhost"
+    bad = client.options("/api/health", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
+    assert "access-control-allow-origin" not in bad.headers

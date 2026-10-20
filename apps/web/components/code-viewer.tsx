@@ -5,7 +5,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Copy, FileCode2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, ApiError } from "../lib/api";
+import { langFor, langLabel } from "../lib/highlight";
 import { cn } from "../lib/utils";
+import { SourceLines } from "./source-code";
 
 type Target = { file: string; start: number; end: number };
 
@@ -59,6 +61,10 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
   }, [onClose]);
 
   const cited = lines ? lines.slice(target.start - 1, target.end).join("\n") : "";
+  const lang = langFor(path);
+  const cut = path.lastIndexOf("/") + 1;
+  const dir = path.slice(0, cut);
+  const name = path.slice(cut);
 
   return (
     <>
@@ -72,7 +78,7 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
       <motion.aside
         role="dialog"
         aria-label={`Source: ${path}`}
-        className="fixed inset-y-0 right-0 z-overlay flex w-full max-w-3xl flex-col border-l border-border bg-card shadow-pop"
+        className="fixed inset-y-0 right-0 z-overlay flex w-full max-w-4xl flex-col border-l border-border bg-card shadow-pop"
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
         exit={{ x: "100%" }}
@@ -81,13 +87,20 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
         <header className="flex items-center gap-3 border-b border-border px-4 py-3">
           <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <p className="truncate font-mono text-sm">{path}</p>
-            <p className="text-[11px] text-muted-foreground">
-              Cited lines {target.start}–{target.end}
-              {lines ? ` · ${lines.length} lines in file` : ""}
+            <p className="truncate font-mono text-[13px]" title={path}>
+              <span className="text-muted-foreground">{dir}</span>
+              <span className="font-medium text-foreground">{name}</span>
+            </p>
+            <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="rounded border border-border px-1 font-mono text-[10px] leading-4">{langLabel(lang)}</span>
+              <span>
+                Lines {target.start}–{target.end} cited
+                {lines ? ` · ${lines.length} in file` : ""}
+              </span>
             </p>
           </div>
           <button
+            type="button"
             onClick={() => {
               navigator.clipboard.writeText(cited).then(() => toast.success("Cited lines copied"));
             }}
@@ -99,6 +112,7 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
             <Copy className="size-4" />
           </button>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
             title="Close (Esc)"
@@ -107,70 +121,94 @@ function CodeDrawer({ repoId, target, onClose }: { repoId: string; target: Targe
             <X className="size-4" />
           </button>
         </header>
-        <div className="scroll-thin-code flex-1 overflow-auto bg-code py-3 font-mono text-[12px] leading-[1.6] text-code-foreground">
-          {error && <p className="px-4 text-sm text-destructive">{error}</p>}
-          {!lines && !error && <p className="px-4 text-sm text-muted-foreground">Loading…</p>}
-          {lines?.map((ln, i) => {
-            const n = i + 1;
-            const hit = n >= target.start && n <= target.end;
-            return (
-              <div
-                key={n}
-                ref={n === target.start ? firstRef : undefined}
-                className={cn("flex min-w-max pr-4", hit && "bg-code-line/15")}
-              >
-                <span
-                  className={cn(
-                    "sticky left-0 w-14 shrink-0 select-none pr-3 text-right",
-                    hit ? "bg-[hsl(var(--code))] text-sky-brand shadow-[inset_2px_0_0_hsl(var(--code-line))]" : "bg-code text-code-muted"
-                  )}
-                >
-                  {n}
-                </span>
-                <span className={cn("whitespace-pre pl-3", hit ? "text-code-foreground" : "text-code-foreground/70")}>
-                  {ln || " "}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        {error ? (
+          <p className="flex-1 bg-editor px-4 py-3 text-sm text-destructive">{error}</p>
+        ) : !lines ? (
+          <div className="flex-1 space-y-2 bg-editor px-4 py-4" aria-label="Loading file">
+            {[72, 54, 88, 40, 66, 58].map((w, i) => (
+              <div key={i} className="h-3 rounded bg-editor-border/70" style={{ width: `${w}%` }} />
+            ))}
+          </div>
+        ) : (
+          <SourceLines
+            code={lines.join("\n")}
+            lang={lang}
+            hit={{ start: target.start, end: target.end }}
+            hitRef={firstRef}
+            className="flex-1"
+          />
+        )}
       </motion.aside>
     </>
   );
 }
 
-/** A clickable `file:12-30` chip. */
+/** A clickable `file:12-30` reference.
+ *  - chip: standalone, in lists of sources
+ *  - inline: inside a sentence, reads like a link rather than a badge
+ *  - row: one line of a file list (name left, line range right) */
 export function CitationChip({
   file,
   start,
   end,
   compact = false,
+  variant = "chip",
   className,
 }: {
   file: string;
   start: number;
   end: number;
   compact?: boolean;
+  variant?: "chip" | "inline" | "row";
   className?: string;
 }) {
   const { open } = useCodeViewer();
-  const name = compact ? file.split("/").slice(-1)[0] : file;
+  const name = compact || variant !== "chip" ? file.split("/").slice(-1)[0] : file;
+  const lines = `${start}${end !== start ? `–${end}` : ""}`;
+  const props = { type: "button" as const, onClick: () => open(file, start, end), title: `Open ${file}, lines ${start}–${end}` };
+
+  if (variant === "inline") {
+    return (
+      <button
+        {...props}
+        className={cn(
+          "inline align-baseline font-mono text-[0.86em] text-primary underline decoration-primary/30 underline-offset-[3px]",
+          "transition-colors hover:decoration-primary",
+          className
+        )}
+      >
+        {name}:{lines}
+      </button>
+    );
+  }
+  if (variant === "row") {
+    return (
+      <button
+        {...props}
+        className={cn(
+          "flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left font-mono text-xs transition-colors hover:bg-secondary",
+          className
+        )}
+      >
+        <FileCode2 className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate">{file}</span>
+        <span className="shrink-0 tabular-nums text-muted-foreground">{lines}</span>
+      </button>
+    );
+  }
   return (
     <button
-      type="button"
-      onClick={() => open(file, start, end)}
-      title={`Open ${file} lines ${start}-${end}`}
+      {...props}
       className={cn(
-        "mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md border border-primary/25 bg-primary/[0.07]",
-        "px-1.5 py-px align-baseline font-mono text-[11px] leading-5 text-primary",
-        "transition-colors hover:border-primary/50 hover:bg-primary/15",
+        "inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-secondary/60 px-1.5 py-px",
+        "align-baseline font-mono text-[11px] leading-5 text-foreground/80",
+        "transition-colors hover:border-primary/40 hover:text-primary",
         className
       )}
     >
-      <FileCode2 className="size-3 shrink-0" />
+      <FileCode2 className="size-3 shrink-0 text-muted-foreground" />
       <span className="truncate">
-        {name}:{start}
-        {end !== start ? `-${end}` : ""}
+        {name}:{lines}
       </span>
     </button>
   );

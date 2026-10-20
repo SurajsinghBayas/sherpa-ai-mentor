@@ -65,7 +65,22 @@ def _gather(store: RepoStore, question: str, k: int) -> List[Tuple[Chunk, float]
     return hits
 
 
-def _llm_prompt(question: str, ctx: str, repo_map: str, history: list) -> str:
+SPOKEN_FORMAT = (
+    "FORMAT (this answer is read aloud in a voice conversation):\n"
+    "Answer in 2-5 short, plain sentences, the way you'd explain it to a colleague out loud. "
+    "No headings, lists, tables or code blocks; name identifiers in plain words. "
+    "End with a short question offering to go deeper.\n"
+)
+WRITTEN_FORMAT = (
+    "FORMAT (GitHub markdown):\n"
+    "1. Start with a direct 2-4 sentence answer.\n"
+    "2. A '**How it works**' section: numbered steps or bullets in execution order.\n"
+    "3. A '**Try next**' line with one concrete follow-up.\n"
+    "Use `inline code` for identifiers, short ```lang fenced``` snippets only if essential.\n"
+)
+
+
+def _llm_prompt(question: str, ctx: str, repo_map: str, history: list, spoken: bool = False) -> str:
     convo = ""
     if history:
         turns = []
@@ -75,11 +90,7 @@ def _llm_prompt(question: str, ctx: str, repo_map: str, history: list) -> str:
         convo = "Conversation so far (for follow-up context):\n" + "\n".join(turns) + "\n\n"
     return (
         f"{convo}Question: {question}\n\n{repo_map}\n\nCode context:\n{ctx}\n\n"
-        "FORMAT (GitHub markdown):\n"
-        "1. Start with a direct 2-4 sentence answer.\n"
-        "2. A '**How it works**' section: numbered steps or bullets in execution order.\n"
-        "3. A '**Try next**' line with one concrete follow-up.\n"
-        "Use `inline code` for identifiers, short ```lang fenced``` snippets only if essential.\n"
+        + (SPOKEN_FORMAT if spoken else WRITTEN_FORMAT) +
         "CITATIONS (mandatory): every factual sentence or bullet ends with one or more "
         "citations copied from a '--- path:start-end ---' header above, or a narrower range "
         "inside it, e.g. [backend/app/api/routes/users.py:40-58]. Never invent paths or line "
@@ -89,14 +100,15 @@ def _llm_prompt(question: str, ctx: str, repo_map: str, history: list) -> str:
 
 
 def answer_question(store: RepoStore, question: str, k: int = 10,
-                    llm_override: dict | None = None, history: list | None = None) -> dict:
+                    llm_override: dict | None = None, history: list | None = None,
+                    spoken: bool = False) -> dict:
     hits = _gather(store, question, k)
     if not hits:
         log.info("ask: retrieval returned no chunks for repo=%s", store.repo_id)
     override = {k_: v for k_, v in (llm_override or {}).items() if v is not None}
     draft, mode, model = "", "offline", None
     if llm.can_use(override) and hits:
-        prompt = _llm_prompt(question, format_context(hits), _repo_map(store), history or [])
+        prompt = _llm_prompt(question, format_context(hits), _repo_map(store), history or [], spoken)
         try:
             draft = llm.complete(SYSTEM_PROMPT, prompt, **override)
             mode, model = "llm", override.get("model") or llm.model

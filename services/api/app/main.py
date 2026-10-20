@@ -35,6 +35,7 @@ from .routers import auth as auth_router
 from .routers import keys as keys_router
 from .routers import study as study_router
 from .routers import uploads as uploads_router
+from .routers import voice as voice_router
 from .persist import SqlBackend, vectors_supported
 from .security import decrypt_secret, get_current_user
 from .store import RepoStore, file_hash
@@ -71,7 +72,9 @@ app = FastAPI(title="Sherpa — AI Codebase Mentor", version="1.0.0", lifespan=l
               openapi_url="/openapi.json" if _dev else None)
 
 # ── CORS ────────────────────────────────────────────────────────────────────
-ALLOWED_ORIGINS: list[str] = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+ALLOWED_ORIGINS: list[str] = [
+    o.strip() for o in f"{settings.allowed_origins},{settings.desktop_origins}".split(",") if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -85,6 +88,7 @@ app.include_router(auth_router.router)
 app.include_router(keys_router.router)
 app.include_router(study_router.router)
 app.include_router(uploads_router.router)
+app.include_router(voice_router.router)
 
 # ── In-memory repo store cache (LRU; reloaded when the DB version moves on) ────
 _stores: "OrderedDict[str, RepoStore]" = OrderedDict()
@@ -608,7 +612,7 @@ def ask(req: AskRequest, request: Request, user=Depends(get_current_user),
     override = _resolve_llm(req.key_id, req.endpoint_id, user, db)
     _charge(db, user, "llm")
     return answer_question(store, req.question.strip(), llm_override=override,
-                           history=req.history[-8:])
+                           history=req.history[-8:], spoken=req.spoken)
 
 
 @app.post("/api/overview")

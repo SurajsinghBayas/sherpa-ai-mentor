@@ -40,6 +40,7 @@ class AskRequest(BaseModel):
     repo_id: str
     question: str
     history: List[dict] = Field(default_factory=list)
+    spoken: bool = False  # voice mode: a short conversational answer meant to be heard
     # SaaS overrides: use one of the caller's stored credentials for this answer.
     key_id: Optional[str] = None       # ProviderKey id (their own OpenAI/Anthropic/Gemini key)
     endpoint_id: Optional[str] = None  # CustomEndpoint id (any OpenAI-compatible / Ollama URL)

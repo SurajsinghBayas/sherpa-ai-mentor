@@ -119,6 +119,18 @@ sherpa status | repos | retry <job_id> | logout
 
 Inside a git checkout the CLI sends only files git tracks or would track (so `.gitignore` is respected), applies the same filters, never follows symlinks, and re-uploading the same `--name` updates the project. The web app has the same guide, with commands filled in for your server, at `/cli` and under **Add repo → CLI** (which also shows CLI uploads live). After editing `cli/sherpa_cli.py`, run `make cli-sync` so the API serves the new version (a test fails until you do). Full guide: [`cli/README.md`](cli/README.md) (install, sign-in, options, CI use, limits, troubleshooting).
 
+## Desktop app (macOS)
+
+The same web app, packaged as a native window with [Tauri 2](https://tauri.app) in `apps/desktop`. One codebase: Tauri bundles a static export of `apps/web`, which calls the API over HTTP like the browser does.
+
+```bash
+make api              # the desktop app talks to http://localhost:8000 for now
+make desktop          # dev window with hot reload (reuses `make web` on :3000 if it is running)
+make desktop-build    # → apps/desktop/src-tauri/target/release/bundle/{macos/Sherpa AI.app, dmg/Sherpa AI_0.1.0_aarch64.dmg}
+```
+
+Needs Rust (`rustup`) and the Xcode command-line tools. Point a build at another API with `SHERPA_API_URL=https://api.your-sherpa.app make desktop-build`. Details, the production checklist and Windows notes: [`apps/desktop/README.md`](apps/desktop/README.md).
+
 ## Deploying
 
 - **Database:** AWS RDS for PostgreSQL (15.2+ has pgvector; ours is 18.3). Migrations run on API startup and enable the extension. See [`docs/rds_setup.md`](docs/rds_setup.md).
@@ -221,6 +233,7 @@ apps/web/
   components/study.tsx    user-study recorder
 evals/               golden questions, eval runner, results, study protocol
 cli/                 `sherpa` command: login, upload a folder, ask (stdlib only)
+apps/desktop/        Tauri 2 shell that packages apps/web as a macOS app (Windows later)
 ```
 
 ## Tests

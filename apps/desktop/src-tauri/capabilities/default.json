@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window may open http(s) and mailto links in the default browser, nothing else.",
+  "windows": ["main"],
+  "permissions": ["core:default", "opener:default"]
+}

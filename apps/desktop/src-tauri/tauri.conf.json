@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Sherpa AI",
+  "version": "0.1.0",
+  "identifier": "ai.sherpa.desktop",
+  "build": {
+    "beforeDevCommand": {
+      "script": "sh scripts/web-dev.sh",
+      "wait": false
+    },
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "npm --prefix ../web run build:desktop",
+    "frontendDist": "../../web/out-desktop"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Sherpa AI",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Your codebase, explained.",
+    "longDescription": "Sherpa AI reads a repository and guides you through it with answers, maps and tours that cite the exact file and line.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

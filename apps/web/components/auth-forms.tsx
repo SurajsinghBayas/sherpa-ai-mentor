@@ -9,6 +9,7 @@ import { OTPInput, REGEXP_ONLY_DIGITS } from "input-otp";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { isDesktop } from "../lib/desktop";
 import { cn } from "../lib/utils";
 import { Button, Input, Label } from "./ui/primitives";
 import { Sherpa, type Pose } from "./sherpa";
@@ -34,7 +35,8 @@ function useFinish() {
 function useAuthConfig() {
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
   useEffect(() => {
-    api.authConfig().then(setCfg).catch(() => setCfg({ google_client_id: null, email_otp: true, password: true }));
+    // Google only accepts web origins it knows; the desktop app (tauri://) signs in with an email code
+    api.authConfig().then((c) => setCfg(isDesktop() ? { ...c, google_client_id: null } : c)).catch(() => setCfg({ google_client_id: null, email_otp: true, password: true }));
   }, []);
   return cfg;
 }
@@ -266,7 +268,7 @@ function EmailCodeForm({ mode, onBusy }: { mode: Mode; onBusy: (b: boolean) => v
             if it isn&apos;t there.
           </p>
         </div>
-        <Button className="w-full" disabled={busy || code.length !== 6} size="lg">
+        <Button type="submit" className="w-full" disabled={busy || code.length !== 6} size="lg">
           {busy ? (
             <Working>Verifying…</Working>
           ) : (
@@ -316,7 +318,7 @@ function EmailCodeForm({ mode, onBusy }: { mode: Mode; onBusy: (b: boolean) => v
           autoComplete="email"
         />
       </div>
-      <Button className="w-full" disabled={busy || !email.trim()} size="lg">
+      <Button type="submit" className="w-full" disabled={busy || !email.trim()} size="lg">
         {busy ? (
           <Working>Sending code…</Working>
         ) : (
@@ -387,7 +389,7 @@ function PasswordForm({ mode, onBusy }: { mode: Mode; onBusy: (b: boolean) => vo
           required
         />
       </div>
-      <Button className="w-full" disabled={busy} size="lg">
+      <Button type="submit" className="w-full" disabled={busy} size="lg">
         {busy ? (
           <Working>{mode === "signup" ? "Creating account…" : "Signing in…"}</Working>
         ) : (

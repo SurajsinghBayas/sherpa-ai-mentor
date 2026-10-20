@@ -218,8 +218,9 @@ export const api = {
     req<{ path: string; lines: string[]; total: number; language: string }>(
       `/api/file?repo_id=${encodeURIComponent(repo_id)}&path=${encodeURIComponent(path)}`),
 
-  ask: (repo_id: string, question: string, history: { role: string; text: string }[] = []) =>
-    req<AskResponse>("/api/ask", post({ repo_id, question, history })),
+  /** `spoken`: a short conversational answer meant to be heard (voice mode). */
+  ask: (repo_id: string, question: string, history: { role: string; text: string }[] = [], spoken = false) =>
+    req<AskResponse>("/api/ask", post({ repo_id, question, history, spoken })),
   overview: (repo_id: string, refresh = false) => req<Overview>("/api/overview", post({ repo_id, refresh })),
   tour: (repo_id: string, flow: string) => req<Tour>("/api/tours", post({ repo_id, flow })),
   tasks: (repo_id: string, refresh = false) => req<Tasks>("/api/tasks", post({ repo_id, refresh })),
@@ -228,6 +229,10 @@ export const api = {
   generateDocs: (repo_id: string) => req<Docs>("/api/docs/generate", post({ repo_id })),
   refreshDocs: (repo_id: string) => req<Docs>("/api/docs/refresh", post({ repo_id })),
   docsMarkdown: async (repo_id: string) => (await raw(`/api/docs/${repo_id}/markdown`)).text(),
+
+  voiceConfig: () => req<{ provider: "polly" | "browser"; voice: string | null; max_chars: number }>("/api/voice/config"),
+  /** MP3 from Amazon Polly; 503 when the API has no AWS credentials (callers fall back to the browser voice). */
+  speak: async (text: string) => (await raw("/api/voice/speak", post({ text }))).blob(),
 
   studyProtocol: () =>
     req<{ tasks: Record<StudyTaskId, { title: string; prompt: string; max_score: number }>; rubric: string }>(

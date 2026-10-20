@@ -1,7 +1,8 @@
-.PHONY: api web dev test lint eval ingest ask refresh-docs cli-sync
+.PHONY: api web dev test lint eval ingest ask refresh-docs cli-sync desktop desktop-build
 
 API_DIR=services/api
 WEB_DIR=apps/web
+DESKTOP_DIR=apps/desktop
 
 # env -u: a Bedrock key exported by your shell profile would otherwise shadow the one in .env
 api:
@@ -12,6 +13,14 @@ web:
 
 dev:
 	docker compose up --build
+
+# desktop app (Tauri 2, needs Rust): a window on the web dev server, with hot reload
+desktop:
+	cd $(DESKTOP_DIR) && PATH="$$HOME/.cargo/bin:$$PATH" npm run dev
+
+# Sherpa AI.app + .dmg in apps/desktop/src-tauri/target/release/bundle; API from SHERPA_API_URL (default localhost:8000)
+desktop-build:
+	cd $(DESKTOP_DIR) && PATH="$$HOME/.cargo/bin:$$PATH" npm run build
 
 test:
 	cd $(API_DIR) && python -m pytest -q

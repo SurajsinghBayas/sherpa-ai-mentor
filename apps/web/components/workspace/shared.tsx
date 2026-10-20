@@ -5,7 +5,9 @@ import { Cpu, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { Mode } from "../../lib/api";
 import { Sherpa, type Pose } from "../sherpa";
 import { Badge } from "../ui/primitives";
+import { langFor } from "../../lib/highlight";
 import { cn } from "../../lib/utils";
+import { SourceLines } from "../source-code";
 
 export const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -99,18 +101,9 @@ export function Dots() {
   );
 }
 
-/** Line-numbered code block for tours. */
-export function CodeBlock({ code, start }: { code: string; start: number }) {
-  return (
-    <pre className="scroll-thin-code overflow-x-auto bg-code py-3 font-mono text-[11.5px] leading-[1.6] text-code-foreground">
-      {code.split("\n").map((ln, i) => (
-        <div key={i} className="flex min-w-max pr-4">
-          <span className="w-12 shrink-0 select-none pr-3 text-right text-code-muted">{start + i}</span>
-          <span className="whitespace-pre">{ln || " "}</span>
-        </div>
-      ))}
-    </pre>
-  );
+/** Line-numbered, highlighted code block for tours. */
+export function CodeBlock({ code, start, file }: { code: string; start: number; file: string }) {
+  return <SourceLines code={code} lang={langFor(file)} start={start} className="max-h-[28rem] text-[12px]" />;
 }
 
 export function timeAgo(ts: number | null | undefined): string {
