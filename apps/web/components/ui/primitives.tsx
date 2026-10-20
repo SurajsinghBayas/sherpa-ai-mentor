@@ -105,9 +105,13 @@ export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInp
     />
   );
 }
-export function Textarea({ className, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export const Textarea = React.forwardRef<
+  HTMLTextAreaElement,
+  React.TextareaHTMLAttributes<HTMLTextAreaElement>
+>(function Textarea({ className, ...props }, ref) {
   return (
     <textarea
+      ref={ref}
       className={cn(
         "flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm",
         "placeholder:text-muted-foreground resize-none",
@@ -119,7 +123,7 @@ export function Textarea({ className, ...props }: React.TextareaHTMLAttributes<H
       {...props}
     />
   );
-}
+});
 export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
   return (
     <label

@@ -30,23 +30,30 @@ def chunk_python(source: str, path: str, max_lines: int = 60, overlap: int = 12)
     bounds = []
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            s = node.lineno
-            e = getattr(node, "end_lineno", s + max_lines - 1) or s
+            # start at the first decorator: `@router.post("/signup")` belongs to its handler
+            s = min([d.lineno for d in node.decorator_list] + [node.lineno])
+            e = getattr(node, "end_lineno", node.lineno + max_lines - 1) or node.lineno
             bounds.append((s, min(e, len(lines))))
     if not bounds:
         return chunk_generic(source, path, max_lines, overlap)
     chunks: List[Chunk] = []
-    # module header (imports/docstring) as its own chunk
-    first = bounds[0][0]
-    if first > 1:
-        chunks.append(Chunk(path, 1, min(first - 1, max_lines),
-                            "\n".join(lines[: min(first - 1, max_lines)]), "header"))
-    for (s, e) in bounds:
+
+    def loose(s: int, e: int, kind: str) -> None:
+        """Module-level code outside any def/class (imports, app setup, constants)."""
+        if e >= s and any(ln.strip() for ln in lines[s - 1: e]):
+            for c in chunk_generic("\n".join(lines[s - 1: e]), path, max_lines, overlap, offset=s - 1):
+                c.kind = kind
+                chunks.append(c)
+
+    loose(1, bounds[0][0] - 1, "header")
+    for i, (s, e) in enumerate(bounds):
         if e - s + 1 > max_lines:
             chunks.extend(chunk_generic("\n".join(lines[s - 1: e]), path,
                                         max_lines, overlap, offset=s - 1))
         else:
             chunks.append(Chunk(path, s, e, "\n".join(lines[s - 1: e]), "def"))
+        nxt = bounds[i + 1][0] if i + 1 < len(bounds) else len(lines) + 1
+        loose(e + 1, nxt - 1, "code")
     return chunks
 
 

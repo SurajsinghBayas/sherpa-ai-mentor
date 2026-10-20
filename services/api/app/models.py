@@ -1,22 +1,31 @@
 """Pydantic schemas — the API contract shared with the web app."""
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class IngestRequest(BaseModel):
     repo_url: Optional[str] = None
     local_path: Optional[str] = None
-    branch: str = "main"
-    # web enrichment (Firecrawl): scrape repo page + these docs URLs into cited chunks
-    enrich_web: bool = True
-    docs_urls: List[str] = Field(default_factory=list)
+    branch: str = ""  # blank = the repo's default branch
 
 
 class IngestResponse(BaseModel):
     repo_id: str
+    name: str = ""
     files: int
     chunks: int
-    web_sources: List[dict] = Field(default_factory=list)
+    changes: dict = Field(default_factory=dict)
+
+
+class SyncRequest(BaseModel):
+    repo_id: str
+    refresh_docs: bool = True
+
+
+class DocsRequest(BaseModel):
+    repo_id: str
+    key_id: Optional[str] = None
+    endpoint_id: Optional[str] = None
 
 
 class Citation(BaseModel):
@@ -49,6 +58,9 @@ class AskResponse(BaseModel):
 
 class OverviewRequest(BaseModel):
     repo_id: str
+    refresh: bool = False
+    key_id: Optional[str] = None
+    endpoint_id: Optional[str] = None
 
 
 class Component(BaseModel):
@@ -62,8 +74,7 @@ class Edge(BaseModel):
     target: str = Field(alias="to")
     via: str = ""
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class OverviewResponse(BaseModel):
@@ -76,6 +87,8 @@ class OverviewResponse(BaseModel):
 class TourRequest(BaseModel):
     repo_id: str
     flow: str = "user signup"
+    key_id: Optional[str] = None
+    endpoint_id: Optional[str] = None
 
 
 class TourStep(BaseModel):
@@ -95,12 +108,15 @@ class TourResponse(BaseModel):
 class TaskRequest(BaseModel):
     repo_id: str
     level: str = "beginner"
+    refresh: bool = False
+    key_id: Optional[str] = None
+    endpoint_id: Optional[str] = None
 
 
 class StarterTask(BaseModel):
     title: str
     why: str
-    files: List[str]
+    files: List[dict]
     steps: List[str]
     difficulty: str = "easy"
 
@@ -145,6 +161,22 @@ class UserOut(BaseModel):
     created_at: str = ""
 
 
+class OtpRequest(BaseModel):
+    email: str = Field(max_length=320)
+    purpose: str = "login"  # login | signup
+    name: str = Field("", max_length=120)
+
+
+class OtpVerify(BaseModel):
+    email: str = Field(max_length=320)
+    code: str = Field(max_length=12)
+    purpose: str = "login"
+
+
+class GoogleAuth(BaseModel):
+    credential: str = Field(max_length=4096)  # Google Identity Services ID token
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -184,3 +216,18 @@ class CustomEndpointOut(BaseModel):
     model: str
     has_key: bool = False
     created_at: str = ""
+
+
+# ---------- user study ----------
+
+class StudyResultCreate(BaseModel):
+    participant: str = Field(min_length=1, max_length=60)  # pseudonym, e.g. P3
+    group: str            # control | sherpa
+    task: str             # architecture | flow | starter
+    repo: str = ""
+    seconds: float
+    score: float = 0
+    useful: int = Field(default=0, ge=0, le=5)
+    trustworthy: int = Field(default=0, ge=0, le=5)
+    reuse: int = Field(default=0, ge=0, le=5)
+    notes: str = ""

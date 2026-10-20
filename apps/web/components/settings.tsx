@@ -31,7 +31,7 @@ const PROVIDERS = [
     id: "anthropic",
     label: "Anthropic",
     hint: "sk-ant-…",
-    models: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6"],
+    models: ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"],
   },
   {
     id: "gemini",

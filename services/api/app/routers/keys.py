@@ -16,7 +16,7 @@ from ..security import decrypt_secret, encrypt_secret, get_current_user
 router = APIRouter(tags=["credentials"])
 
 PROVIDERS = {"openai", "anthropic", "gemini", "openrouter"}
-DEFAULT_MODELS = {"openai": "gpt-4o-mini", "anthropic": "claude-3-5-haiku-latest",
+DEFAULT_MODELS = {"openai": "gpt-4o-mini", "anthropic": "claude-haiku-5-5",
                   "gemini": "gemini-1.5-flash",
                   "openrouter": "openai/gpt-4o-mini"}
 

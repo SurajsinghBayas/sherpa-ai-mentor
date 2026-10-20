@@ -9,6 +9,7 @@ import { cn } from "../lib/utils";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Mentor" },
+  { href: "/study", label: "User study" },
   { href: "/settings", label: "Keys" },
 ];
 
@@ -19,25 +20,25 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border glass">
-      <div className="container flex h-14 items-center gap-4">
+      <div className="container flex h-14 items-center gap-2 sm:gap-4">
         {/* logo */}
         <Link
           href="/"
           className="flex items-center gap-2 font-semibold tracking-tight transition-opacity hover:opacity-80"
         >
           <SherpaOrb size="xs" />
-          <span>Sherpa</span>
+          <span className="hidden sm:inline">Sherpa</span>
         </Link>
 
         {/* nav (authenticated) */}
         {user && (
-          <nav className="flex items-center gap-1 text-sm ml-2">
+          <nav className="no-scrollbar ml-1 flex min-w-0 items-center gap-1 overflow-x-auto text-sm sm:ml-2">
             {NAV_LINKS.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 font-medium transition-colors duration-150",
+                  "whitespace-nowrap rounded-lg px-2.5 py-1.5 font-medium transition-colors duration-150 sm:px-3",
                   path === href
                     ? "bg-secondary text-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -50,7 +51,7 @@ export function SiteHeader() {
         )}
 
         {/* right side */}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {user ? (
             <>
               <span className="hidden text-sm text-muted-foreground sm:block">

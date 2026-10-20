@@ -7,10 +7,10 @@ export const Root: React.FC = () => {
     <Composition
       id="SherpaAd"
       component={SherpaAd}
-      durationInFrames={900} /* 30 seconds at 30fps */
+      durationInFrames={900}
       fps={30}
-      width={1280}
-      height={720}
+      width={1920}
+      height={1080}
       defaultProps={{}}
     />
   );

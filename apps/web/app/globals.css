@@ -190,3 +190,8 @@ code:not([class]) {
   @apply rounded px-1.5 py-0.5 font-mono text-xs;
   background: hsl(var(--secondary));
 }
+
+@layer utilities {
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}

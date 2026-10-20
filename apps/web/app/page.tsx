@@ -9,7 +9,6 @@ import {
   ChevronRight,
   FileCode2,
   GitBranch,
-  KeyRound,
   ListTodo,
   Map,
   MessageSquare,
@@ -43,12 +42,12 @@ function inView(i: number) {
 const DEMO_EXCHANGE = [
   {
     role: "user" as const,
-    text: "How does user authentication work?",
+    text: "What happens when a user signs up?",
   },
   {
     role: "sherpa" as const,
-    text: "Auth flows through POST /api/auth/login. The handler validates credentials with bcrypt, then issues a 24-hour JWT signed with your configured secret.",
-    sources: ["app/routers/auth.py:38-44", "app/security.py:22-33"],
+    text: "The signup form validates input with Zod and calls signUpMutation, which posts to the backend's register_user endpoint. It rejects duplicate emails, creates the user through crud.create_user, then the UI redirects to /login.",
+    sources: ["frontend/src/hooks/useAuth.ts:29-39", "backend/app/api/routes/users.py:147-159"],
   },
 ];
 
@@ -82,9 +81,9 @@ const FEATURES = [
     bg: "bg-amber-500/8",
   },
   {
-    icon: KeyRound,
-    title: "Bring your own keys",
-    body: "OpenAI, Anthropic, Gemini, or any OpenAI-compatible endpoint — encrypted at rest, last 4 digits shown in UI.",
+    icon: BookOpen,
+    title: "Living docs",
+    body: "An onboarding guide generated from the code. When files change, only the sections that cite them are flagged and rewritten.",
     color: "text-rose-400",
     bg: "bg-rose-500/8",
   },
@@ -199,7 +198,7 @@ export default function Landing() {
               <span className="h-2.5 w-2.5 rounded-full bg-border" />
               <span className="h-2.5 w-2.5 rounded-full bg-border" />
               <span className="ml-3 text-xs text-muted-foreground font-mono">
-                gothinkster/realworld
+                fastapi/full-stack-fastapi-template
               </span>
             </div>
 

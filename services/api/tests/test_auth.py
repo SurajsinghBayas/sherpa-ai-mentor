@@ -78,21 +78,45 @@ def test_endpoints_crud_and_probe(client):
                          headers=h).status_code == 204
 
 
-def test_ask_with_foreign_key_rejected(client):
-    """Users can't borrow each other's credentials (or use them logged out)."""
+def test_repos_and_keys_are_private(client, monkeypatch):
+    """Users can't see each other's repos or borrow each other's credentials."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "allow_local_ingest", True)
     t1 = _register(client, "a@sherpa.dev")
     t2 = _register(client, "b@sherpa.dev")
-    k = client.post("/api/keys", headers={"Authorization": f"Bearer {t1}"},
+    h1, h2 = ({"Authorization": f"Bearer {t}"} for t in (t1, t2))
+    k = client.post("/api/keys", headers=h1,
                     json={"provider": "openai", "api_key": "sk-test1234567890"})
     key_id = k.json()["id"]
-    # ingest something to ask about (auth tables live under the same app)
-    repo = client.post("/api/ingest-self").json()["repo_id"]
-    anon = client.post("/api/ask", json={"repo_id": repo, "question": "hi",
-                                         "key_id": key_id})
-    assert anon.status_code == 401
-    other = client.post("/api/ask", headers={"Authorization": f"Bearer {t2}"},
-                        json={"repo_id": repo, "question": "hi", "key_id": key_id})
+    repo = client.post("/api/ingest-self", headers=h1).json()["repo_id"]
+    # logged out: nothing works
+    assert client.post("/api/ask", json={"repo_id": repo, "question": "hi"}).status_code == 401
+    assert client.get("/api/repos").status_code == 401
+    # another user can't see, read or query the repo
+    assert client.get("/api/repos", headers=h2).json()["repos"] == []
+    assert client.get("/api/file", headers=h2, params={"repo_id": repo, "path": "README.md"}).status_code == 404
+    assert client.post("/api/ask", headers=h2, json={"repo_id": repo, "question": "hi"}).status_code == 404
+    # …nor use the owner's stored key on their own repo
+    repo2 = client.post("/api/ingest-self", headers=h2).json()["repo_id"]
+    assert repo2 != repo
+    other = client.post("/api/ask", headers=h2, json={"repo_id": repo2, "question": "hi", "key_id": key_id})
     assert other.status_code == 404
-    # anonymous ask without credentials still works (offline fallback)
-    plain = client.post("/api/ask", json={"repo_id": repo, "question": "how are citations verified?"})
-    assert plain.status_code == 200 and plain.json()["citations"]
+    # the owner can (offline fallback, still cited)
+    mine = client.post("/api/ask", headers=h1, json={"repo_id": repo, "question": "how are citations verified?"})
+    assert mine.status_code == 200 and mine.json()["citations"]
+    assert [r["repo_id"] for r in client.get("/api/repos", headers=h1).json()["repos"]] == [repo]
+    # deleting removes it (and its rows) for the owner only
+    assert client.delete(f"/api/repos/{repo}", headers=h2).status_code == 404
+    assert client.delete(f"/api/repos/{repo}", headers=h1).status_code == 204
+    assert client.get("/api/repos", headers=h1).json()["repos"] == []
+
+
+def test_daily_llm_quota(client, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "allow_local_ingest", True)
+    monkeypatch.setattr(settings, "daily_llm_requests", 2)
+    h = {"Authorization": f"Bearer {_register(client, 'q@sherpa.dev')}"}
+    repo = client.post("/api/ingest-self", headers=h).json()["repo_id"]
+    codes = [client.post("/api/ask", headers=h, json={"repo_id": repo, "question": "what is this?"}).status_code
+             for _ in range(3)]
+    assert codes == [200, 200, 429]

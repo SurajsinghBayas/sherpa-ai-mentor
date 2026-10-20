@@ -1,6 +1,16 @@
-[
-  {"q": "How does user signup work?", "must_mention": ["route", "user"], "min_citations": 1},
-  {"q": "Where is authentication handled?", "must_mention": ["auth"], "min_citations": 1},
-  {"q": "What is the entrypoint of the app?", "must_mention": ["main", "app"], "min_citations": 1},
-  {"q": "How is data validated on input?", "must_mention": ["valid"], "min_citations": 1}
-]
+{
+  "repo_url": "https://github.com/fastapi/full-stack-fastapi-template",
+  "note": "expect_files: at least one citation should land in one of these files (what a maintainer would point to).",
+  "questions": [
+    {"q": "What happens when a user signs up?", "expect_files": ["backend/app/api/routes/users.py", "frontend/src/routes/signup.tsx", "frontend/src/hooks/useAuth.ts"]},
+    {"q": "How does login work and where is the access token created?", "expect_files": ["backend/app/api/routes/login.py", "backend/app/core/security.py"]},
+    {"q": "How are passwords hashed and verified?", "expect_files": ["backend/app/core/security.py", "backend/app/crud.py"]},
+    {"q": "How does the backend know which user is making a request?", "expect_files": ["backend/app/api/deps.py"]},
+    {"q": "Where are the database models defined?", "expect_files": ["backend/app/models.py"]},
+    {"q": "How does password recovery send an email?", "expect_files": ["backend/app/api/routes/login.py", "backend/app/utils.py"]},
+    {"q": "Where is the application configuration loaded from?", "expect_files": ["backend/app/core/config.py"]},
+    {"q": "How does the frontend call the backend API?", "expect_files": ["frontend/src/main.tsx", "frontend/src/client/sdk.gen.ts", "frontend/src/hooks/useAuth.ts", "frontend/src/client/core/OpenAPI.ts"]},
+    {"q": "How are database migrations managed?", "expect_files": ["backend/app/alembic/env.py", "backend/alembic.ini"]},
+    {"q": "Who is allowed to create or delete other users?", "expect_files": ["backend/app/api/routes/users.py", "backend/app/api/deps.py"]}
+  ]
+}

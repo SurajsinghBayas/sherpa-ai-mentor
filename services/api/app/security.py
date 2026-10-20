@@ -1,6 +1,7 @@
 """Auth + secrets: bcrypt passwords, JWT sessions, Fernet key encryption."""
 import base64
 import hashlib
+import logging
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import get_session
 
+log = logging.getLogger(__name__)
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _bearer = HTTPBearer(auto_error=False)
 
@@ -70,7 +72,8 @@ def get_optional_user(db: Session = Depends(get_session),
         return None
     try:
         return _user_from_token(db, creds.credentials)
-    except HTTPException:
+    except HTTPException as e:
+        log.info("optional auth: bad token (%s); continuing as anonymous", e.detail)
         return None
 
 
@@ -95,5 +98,6 @@ def decrypt_secret(ciphertext: str) -> str:
     try:
         return _fernet().decrypt(ciphertext.encode()).decode()
     except InvalidToken:
+        log.error("cannot decrypt stored secret — ENCRYPTION_KEY/JWT_SECRET_KEY changed?")
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
                             "cannot decrypt stored key (ENCRYPTION_KEY rotated?)")
