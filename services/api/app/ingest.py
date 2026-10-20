@@ -178,9 +178,8 @@ def repo_name(source: str) -> str:
     return m.group(1) if m else os.path.basename(source.rstrip("/"))
 
 
-def snapshot_dir(root: str, prefix: str = "") -> Tuple[List[Chunk], dict, dict]:
-    """Walk + chunk a directory. Returns (chunks, roles, sources)."""
-    chunks: List[Chunk] = []
+def read_dir(root: str, prefix: str = "") -> Tuple[dict, dict]:
+    """Walk a directory and read every indexable file. Returns (sources, roles)."""
     roles: dict = {}
     sources: dict = {}
     for full in _walk(root):
@@ -195,13 +194,47 @@ def snapshot_dir(root: str, prefix: str = "") -> Tuple[List[Chunk], dict, dict]:
             continue
         sources[rel] = text
         roles[rel] = detect_role(rel, text)
-        chunks.extend(chunk_file(text, rel, settings.chunk_lines, settings.chunk_overlap))
-    return chunks, roles, sources
+    return sources, roles
 
 
-def ingest_source(repo_url: str | None, local_path: str | None,
-                  branch: str = "main") -> Tuple[str, List[Chunk], dict, dict]:
-    """Returns (repo_id, chunks, meta, sources)."""
+def chunk_sources(sources: dict, only=None) -> List[Chunk]:
+    """Chunk every file, or just the paths in `only` (incremental re-index)."""
+    chunks: List[Chunk] = []
+    for rel, text in sources.items():
+        if only is None or rel in only:
+            chunks.extend(chunk_file(text, rel, settings.chunk_lines, settings.chunk_overlap))
+    return chunks
+
+
+def snapshot_dir(root: str, prefix: str = "") -> Tuple[List[Chunk], dict, dict]:
+    """Walk + chunk a directory. Returns (chunks, roles, sources)."""
+    sources, roles = read_dir(root, prefix)
+    return chunk_sources(sources), roles, sources
+
+
+def remote_head(repo_url: str, branch: str = "") -> str:
+    """Latest commit sha of a branch (default branch when blank) without cloning.
+
+    One small `git ls-remote` round trip, so checking for new commits is cheap.
+    """
+    ref = f"refs/heads/{branch}" if branch else "HEAD"
+    cmd = ["git", *_GIT_SAFE, "ls-remote", "--", repo_url, ref]
+    try:
+        out = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=30,
+                             env={**os.environ, **_GIT_ENV}).stdout
+    except subprocess.TimeoutExpired:
+        raise IngestError("the git host didn't answer in time; try again shortly")
+    except subprocess.CalledProcessError as e:
+        raise IngestError(_git_error(e.stderr)) from e
+    sha = out.split()[0] if out.strip() else ""
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise IngestError("branch not found" if branch else "couldn't read the repository's latest commit")
+    return sha
+
+
+def fetch_source(repo_url: str | None, local_path: str | None,
+                 branch: str = "") -> Tuple[dict, dict]:
+    """Clone (or open) a source and read its files without chunking. Returns (sources, meta)."""
     cleanup = None
     commit = ""
     if repo_url:
@@ -220,8 +253,8 @@ def ingest_source(repo_url: str | None, local_path: str | None,
             branch = ""
         cleanup = os.path.dirname(root)
         source = repo_url
-        try:
-            commit = subprocess.run(["git", "-C", root, "rev-parse", "--short", "HEAD"],
+        try:  # full sha: compared with `git ls-remote` to detect new commits
+            commit = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
                                     capture_output=True, text=True, timeout=10).stdout.strip()
         except Exception:  # noqa: BLE001
             commit = ""
@@ -233,13 +266,12 @@ def ingest_source(repo_url: str | None, local_path: str | None,
     else:
         raise ValueError("provide repo_url or local_path")
 
-    repo_id = repo_id_for(source)
     try:
-        chunks, file_roles, sources = snapshot_dir(root)
+        sources, file_roles = read_dir(root)
     finally:
         if cleanup and os.path.isdir(cleanup):
             shutil.rmtree(cleanup, ignore_errors=True)
-    if not chunks:
+    if not sources:
         raise IngestError("no readable source files found in the repository")
 
     name = repo_name(source) if repo_url else os.path.basename(root.rstrip("/"))
@@ -247,7 +279,17 @@ def ingest_source(repo_url: str | None, local_path: str | None,
             "commit": commit, "kind": "git" if repo_url else "local",
             "indexed_at": time.time(), "roles": file_roles,
             "languages": _langs(file_roles)}
-    return repo_id, chunks, meta, sources
+    return sources, meta
+
+
+def ingest_source(repo_url: str | None, local_path: str | None,
+                  branch: str = "main") -> Tuple[str, List[Chunk], dict, dict]:
+    """Returns (repo_id, chunks, meta, sources)."""
+    sources, meta = fetch_source(repo_url, local_path, branch)
+    chunks = chunk_sources(sources)
+    if not chunks:
+        raise IngestError("no readable source files found in the repository")
+    return repo_id_for(meta["source"]), chunks, meta, sources
 
 
 def _langs(roles: dict) -> List[str]:

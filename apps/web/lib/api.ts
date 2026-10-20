@@ -108,8 +108,13 @@ export type Docs = {
   changelog: { at: number; event: string; sections: string[]; changed_files: string[] }[];
 };
 export type SyncResult = Repo & {
-  changes: Changes; changed_count: number; docs_refreshed: string[]; docs: Docs | null;
+  changes: Changes; changed_count: number; full?: boolean; docs_refreshed: string[]; docs: Docs | null;
 };
+export type CheckResult =
+  | { status: "up_to_date"; commit: string; latest: string }
+  | { status: "updated"; previous_commit: string; changes: Changes; changed_count: number } & Repo
+  | { status: "outdated" | "error"; detail: string; commit: string; latest?: string }
+  | { status: "unsupported"; commit: string };
 
 export type StudyTaskId = "architecture" | "flow" | "starter";
 export type StudyResult = {
@@ -152,6 +157,10 @@ export const api = {
   ingest: (source: { repo_url?: string; local_path?: string }) =>
     req<Repo & { changes: Changes }>("/api/ingest", post(source)),
   sync: (repo_id: string) => req<SyncResult>("/api/sync", post({ repo_id, refresh_docs: true })),
+  /** Manual "Reindex": rebuild the whole index from the source (docs are left to the Docs tab). */
+  reindex: (repo_id: string) => req<SyncResult>("/api/sync", post({ repo_id, full: true, refresh_docs: false })),
+  /** Automatic: new commit upstream → re-index only the changed files; cheap when unchanged. */
+  checkUpdates: (repo_id: string) => req<CheckResult>(`/api/repos/${encodeURIComponent(repo_id)}/check`, { method: "POST" }),
   file: (repo_id: string, path: string) =>
     req<{ path: string; lines: string[]; total: number; language: string }>(
       `/api/file?repo_id=${encodeURIComponent(repo_id)}&path=${encodeURIComponent(path)}`),

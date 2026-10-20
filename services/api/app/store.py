@@ -41,6 +41,9 @@ def _stem(t: str) -> str:
 class Backend(Protocol):
     def load(self) -> Optional[Tuple[List[Chunk], Dict, Dict[str, str], int]]: ...
     def save(self, chunks: List[Chunk], meta: Dict, sources: Dict[str, str]) -> int: ...
+    def save_incremental(self, changed: Dict[str, str], removed: List[str],
+                         new_chunks: List[Chunk], meta: Dict, files_count: int,
+                         chunks_count: int) -> int: ...
     def cache_get(self, name: str) -> Dict | None: ...
     def cache_put(self, name: str, value: Dict) -> None: ...
     def cache_clear(self, *names: str) -> None: ...
@@ -58,6 +61,10 @@ class MemoryBackend:
         return None
 
     def save(self, chunks, meta, sources) -> int:
+        self.version += 1
+        return self.version
+
+    def save_incremental(self, changed, removed, new_chunks, meta, files_count, chunks_count) -> int:
         self.version += 1
         return self.version
 
@@ -96,6 +103,27 @@ class RepoStore:
             meta.setdefault("file_hashes", {p: file_hash(t) for p, t in self.sources.items()})
         self._tfidf = None
         self.version = self.backend.save(chunks, meta, self.sources)
+
+    def apply_changes(self, sources: Dict[str, str], meta: Dict, changes: Dict[str, List[str]],
+                      new_chunks: List[Chunk]) -> None:
+        """Incremental re-index: swap in the chunks of changed files, keep the rest.
+
+        `sources` is the full new file set; `changes` is {added, modified, removed};
+        `new_chunks` are the chunks of the added and modified files only.
+        """
+        touched = set(changes.get("added", [])) | set(changes.get("modified", [])) \
+            | set(changes.get("removed", []))
+        merged = [c for c in self.chunks if c.file not in touched] + new_chunks
+        meta["file_hashes"] = {p: file_hash(t) for p, t in sources.items()}
+        changed = {p: sources[p] for p in changes.get("added", []) + changes.get("modified", [])}
+        self.version = self.backend.save_incremental(changed, list(changes.get("removed", [])),
+                                                     new_chunks, meta, len(sources), len(merged))
+        loaded = self.backend.load()  # the database order is the source of truth
+        if loaded:
+            self.chunks, self.meta, self.sources, self.version = loaded
+        else:
+            self.chunks, self.meta, self.sources = merged, meta, sources
+        self._tfidf = None
 
     # ---------- cached agent outputs (overview, docs, tasks …) ----------
 

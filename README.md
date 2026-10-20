@@ -114,13 +114,19 @@ Every `/api/*` route except sign-up/login and the study protocol needs a signed-
 | `POST` | `/api/tasks` | Starter tasks grounded in code signals |
 | `POST` | `/api/docs/generate` · `/api/docs/refresh` | Create the onboarding guide · rewrite stale sections |
 | `GET` | `/api/docs/{repo_id}` · `/markdown` | Guide with per-section stale status · Markdown export |
-| `POST` | `/api/sync` | Re-index from source, diff, and refresh stale doc sections |
+| `POST` | `/api/repos/{repo_id}/check` | Automatic re-index: compares the indexed commit with the remote's latest (`git ls-remote`, no clone, no quota). If it moved, only added/modified/removed files are re-chunked, re-embedded and rewritten → `up_to_date` · `updated` (+ `changes`) · `outdated` (busy/out of quota) · `error` |
+| `POST` | `/api/sync` | Re-index from source and refresh stale doc sections; `full: true` rebuilds the whole index (the **Reindex** button) |
 | `GET` | `/api/file` | Full text of a snapshot file (backs the citation viewer) |
 | `POST` | `/api/freshness` | Check *your own* docs for dead file references and headings with no matching code |
 | `*` | `/api/study/*` | User-study protocol, results, summary and CSV (auth required) |
 | `POST` | `/api/auth/otp/request` · `/api/auth/otp/verify` | Email a 6-digit code (10 min, 5 tries, 1/min, 5/hour) · exchange it for a session |
 | `POST` | `/api/auth/google` | Sign in or sign up with a Google ID token |
 | `*` | `/api/auth/*`, `/api/keys`, `/api/endpoints` | Password accounts, auth config, and bring-your-own LLM credentials (Fernet-encrypted) |
+
+## Keeping the index current
+
+- **Automatic:** when a repo is opened, when you return to the tab, and every 5 minutes while it's open, the web app calls `/api/repos/{id}/check`. The API compares the indexed commit with the branch's latest commit (one `git ls-remote`; checks within 60 s reuse the answer). If it changed, it clones, diffs file hashes, and rewrites only the changed files' rows; unchanged files keep their chunks and embeddings. Overview and starter tasks are recomputed; doc sections whose sources changed show as stale. Local folders (dev) are compared by file hashes instead.
+- **Manual:** the **Reindex** button in the repo bar rebuilds the entire index from the latest code (`/api/sync` with `full: true`). Embeddings are still reused for chunks whose text didn't change, so a rebuild costs little.
 
 ## Production guardrails
 
@@ -187,7 +193,7 @@ evals/               golden questions, eval runner, results, study protocol
 
 ## Tests
 
-`make test` runs 49 backend tests: citation verification, import graph, living-docs staleness, LLM fallback chain, ingest safety, repo ownership, quotas, migrations, email codes, Google sign-in, tour call-following, production config checks, study API, and the production guardrails (SSRF, symlinks, git URL/branch validation, rate limits, ingest slots, body limits). They run offline and never call a paid model. `make eval` runs the live grounding eval. CI also builds the web app.
+`make test` runs 55 backend tests: citation verification, import graph, living-docs staleness, LLM fallback chain, ingest safety, repo ownership, quotas, migrations, email codes, Google sign-in, tour call-following, production config checks, study API, and the production guardrails (SSRF, symlinks, git URL/branch validation, rate limits, ingest slots, body limits) and re-indexing (commit check, incremental vs full). They run offline and never call a paid model. `make eval` runs the live grounding eval. CI also builds the web app.
 
 ## Tools, models and credits
 

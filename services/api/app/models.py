@@ -20,6 +20,7 @@ class IngestResponse(BaseModel):
 class SyncRequest(BaseModel):
     repo_id: str
     refresh_docs: bool = True
+    full: bool = False  # True: rebuild the whole index (manual "Reindex"); else only changed files
 
 
 class DocsRequest(BaseModel):

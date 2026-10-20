@@ -26,7 +26,8 @@ from .db import engine as _engine, get_session, init_db
 from .guards import check_branch, check_outbound_url, enforce, normalize_repo_url
 from .dbmodels import CustomEndpoint, ProviderKey, Repo, RepoArtifact, UsageCounter
 from .embeddings import embedder
-from .ingest import IngestError, ingest_source, repo_id_for, snapshot_dir, _langs
+from .ingest import (IngestError, chunk_sources, fetch_source, ingest_source, remote_head,
+                     repo_id_for, snapshot_dir, _langs)
 from .llm import llm
 from .models import (AskRequest, DocsRequest, FreshnessRequest, IngestRequest,
                      OverviewRequest, SyncRequest, TaskRequest, TourRequest)
@@ -35,7 +36,7 @@ from .routers import keys as keys_router
 from .routers import study as study_router
 from .persist import SqlBackend, vectors_supported
 from .security import decrypt_secret, get_current_user
-from .store import RepoStore
+from .store import RepoStore, file_hash
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper(),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -396,6 +397,7 @@ def delete_repo(repo_id: str, user=Depends(get_current_user), db: Session = Depe
     db.commit()
     with _stores_lock:
         _stores.pop(repo_id, None)
+    _last_check.pop(repo_id, None)
 
 
 @app.post("/api/ingest")
@@ -408,21 +410,125 @@ def ingest(req: IngestRequest, request: Request, user=Depends(get_current_user),
     return {**_repo_summary(store, db), "changes": changes}
 
 
+def _source_of(store: RepoStore) -> IngestRequest:
+    """Where a repo was indexed from, re-validated (the rules may have tightened since)."""
+    src, kind = store.meta.get("source", ""), store.meta.get("kind")
+    if kind == "self":
+        raise HTTPException(422, "use /api/ingest-self to re-index Sherpa itself")
+    is_git = kind != "local" and src.startswith("http")
+    return _validate_source(IngestRequest(repo_url=src if is_git else None,
+                                          local_path=None if is_git else src,
+                                          branch=store.meta.get("branch", "")))
+
+
+def _reindex(old: RepoStore, user, db: Session, full: bool) -> tuple[RepoStore, dict]:
+    """Re-read a repo from its source into the SAME repo_id.
+
+    full=False: only added/modified/removed files are re-chunked, re-embedded and rewritten.
+    full=True:  the whole index is rebuilt from scratch (manual "Reindex").
+    """
+    src = _source_of(old)
+    with _IngestSlot(user.id):
+        try:
+            sources, meta = fetch_source(src.repo_url, src.local_path, src.branch)
+        except (IngestError, ValueError) as e:
+            log.warning("reindex failed repo=%s: %s", old.repo_id, e)
+            raise HTTPException(400, f"reindex failed: {str(e)[:300]}")
+        except Exception:  # noqa: BLE001
+            log.exception("reindex crashed repo=%s", old.repo_id)
+            raise HTTPException(500, "reindex failed unexpectedly; please try again")
+    meta["source"] = old.meta.get("source", meta["source"])  # keep the stored identity
+    old_hashes = dict(old.meta.get("file_hashes") or {})
+    new_hashes = {p: file_hash(t) for p, t in sources.items()}
+    changes = _diff(old_hashes, new_hashes) if old_hashes else \
+        {"added": sorted(sources), "removed": [], "modified": []}
+    t0 = time.time()
+    if full or not old_hashes:
+        chunks = chunk_sources(sources)
+        if not chunks:
+            raise HTTPException(400, "reindex failed: no readable source files found")
+        store = RepoStore(old.repo_id, SqlBackend(old.repo_id, user.id))
+        store.save(chunks, meta, sources)
+        store.cache_clear("overview", "tasks")  # a manual rebuild starts the analyses fresh
+        mode = "full"
+    else:
+        store = RepoStore(old.repo_id, SqlBackend(old.repo_id, user.id))
+        new_chunks = chunk_sources(sources, only=set(changes["added"]) | set(changes["modified"]))
+        store.apply_changes(sources, meta, changes, new_chunks)
+        if any(changes.values()):
+            store.cache_clear("overview", "tasks")  # docs keep their per-section staleness
+        mode = "incremental"
+    _remember(store)
+    n = sum(len(v) for v in changes.values())
+    log.info("reindex %s repo=%s: %d files changed (%d added, %d modified, %d removed) in %.1fs",
+             mode, old.repo_id, n, len(changes["added"]), len(changes["modified"]),
+             len(changes["removed"]), time.time() - t0)
+    return store, changes
+
+
+# last automatic check per repo: (monotonic time, latest remote commit)
+_last_check: dict[str, tuple[float, str]] = {}
+CHECK_INTERVAL = 60
+
+
+@app.post("/api/repos/{repo_id}/check")
+def check_for_updates(repo_id: str, request: Request, user=Depends(get_current_user),
+                      db: Session = Depends(get_session)):
+    """Automatic re-index: compare the remote's latest commit with the indexed one, and if
+    it moved, re-index only the files that changed. Cheap when nothing changed (one
+    `git ls-remote`, no clone, no quota)."""
+    _check_rate(request, "check", user)
+    old = get_store(repo_id, user, db)
+    kind, current = old.meta.get("kind"), old.meta.get("commit") or ""
+    if kind == "self":
+        return {"status": "unsupported", "commit": current}
+    src = _source_of(old)
+    if src.repo_url:
+        now = time.monotonic()
+        cached = _last_check.get(repo_id)
+        if cached and now - cached[0] < CHECK_INTERVAL:
+            latest = cached[1]
+        else:
+            try:
+                latest = remote_head(src.repo_url, src.branch)
+            except IngestError as e:
+                return {"status": "error", "detail": str(e), "commit": current}
+            _last_check[repo_id] = (now, latest)
+        # older snapshots stored a short sha
+        if current and latest.startswith(current):
+            return {"status": "up_to_date", "commit": current, "latest": latest}
+    else:  # local folder (dev only): no commit to compare, so compare file hashes
+        latest = ""
+        try:
+            sources, _ = fetch_source(None, src.local_path)
+        except (IngestError, ValueError) as e:
+            return {"status": "error", "detail": str(e), "commit": current}
+        if {p: file_hash(t) for p, t in sources.items()} == old.meta.get("file_hashes"):
+            return {"status": "up_to_date", "commit": current, "latest": latest}
+    try:
+        _charge(db, user, "ingest")
+        store, changes = _reindex(old, user, db, full=False)
+    except HTTPException as e:
+        if e.status_code in (409, 429, 503):  # busy or out of quota: say so, don't fail the page
+            return {"status": "outdated", "detail": e.detail, "commit": current, "latest": latest}
+        raise
+    if src.repo_url:
+        _last_check[repo_id] = (time.monotonic(), store.meta.get("commit") or latest)
+    return {"status": "updated", **_repo_summary(store, db), "previous_commit": current,
+            "changes": changes, "changed_count": sum(len(v) for v in changes.values())}
+
+
 @app.post("/api/sync")
 def sync(req: SyncRequest, request: Request, user=Depends(get_current_user),
          db: Session = Depends(get_session)):
-    """Re-index a repo from its source and refresh any docs sections the change made stale."""
+    """Re-index a repo from its source (incremental, or `full` for a manual rebuild) and
+    refresh any docs sections the change made stale."""
     _check_rate(request, "sync", user)
     old = get_store(req.repo_id, user, db)
-    src, kind = old.meta.get("source", ""), old.meta.get("kind")
-    if kind == "self":
-        raise HTTPException(422, "use /api/ingest-self to re-index Sherpa itself")
-    ir = IngestRequest(repo_url=src if kind != "local" and src.startswith("http") else None,
-                       local_path=src if kind == "local" or not src.startswith("http") else None,
-                       branch=old.meta.get("branch", ""))
-    ir = _validate_source(ir)
+    _source_of(old)  # validate before spending quota
     _charge(db, user, "ingest")
-    store, changes = _index(ir.repo_url, ir.local_path, ir.branch, user, db)
+    store, changes = _reindex(old, user, db, full=req.full)
+    _last_check.pop(req.repo_id, None)
     changed = changes.get("modified", []) + changes.get("removed", []) + changes.get("added", [])
     doc = get_docs(store)
     refreshed = []
@@ -432,7 +538,7 @@ def sync(req: SyncRequest, request: Request, user=Depends(get_current_user),
         doc = refresh_docs(store, _resolve_llm(None, None, user, db), changed)
         refreshed = sorted(before)
     return {**_repo_summary(store, db), "changes": changes, "changed_count": len(changed),
-            "docs_refreshed": refreshed, "docs": doc}
+            "full": req.full, "docs_refreshed": refreshed, "docs": doc}
 
 
 @app.post("/api/ingest-self")

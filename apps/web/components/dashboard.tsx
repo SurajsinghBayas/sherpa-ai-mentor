@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { BookOpen, ChevronDown, FolderGit2, ListTodo, Map, MessageSquare, Plus, Route, Trash2 } from "lucide-react";
+import {
+  AlertCircle, BookOpen, CheckCircle2, ChevronDown, FolderGit2, ListTodo, Map, MessageSquare,
+  Plus, RefreshCw, Route, Trash2,
+} from "lucide-react";
 import { api, ApiError, type Health, type Repo } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { cn } from "../lib/utils";
@@ -29,6 +32,41 @@ const NAV: { id: TabId; icon: typeof Map; label: string; short: string; hint: st
 
 const DEMO_REPO = "https://github.com/fastapi/full-stack-fastapi-template";
 const LAST_REPO_KEY = "sherpa.repo";
+const RECHECK_MS = 5 * 60_000; // while the tab is open
+const FOCUS_RECHECK_MS = 2 * 60_000; // when the user comes back to the tab
+
+/** Whether the open repo matches its source: checked automatically, rebuilt on demand. */
+type Freshness = {
+  state: "idle" | "checking" | "reindexing" | "up_to_date" | "outdated" | "error";
+  detail?: string;
+};
+
+const shortSha = (c: string) => (/^[0-9a-f]{8,}$/i.test(c) ? c.slice(0, 7) : c);
+
+function FreshnessChip({ f }: { f: Freshness }) {
+  if (f.state === "checking")
+    return (
+      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title="Comparing with the latest commit">
+        <Dots /> checking
+      </span>
+    );
+  if (f.state === "up_to_date")
+    return (
+      <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title="Matches the latest commit">
+        <CheckCircle2 className="size-3 text-emerald-500" /> up to date
+      </span>
+    );
+  if (f.state === "outdated" || f.state === "error")
+    return (
+      <span
+        className={cn("flex items-center gap-1 text-[11px]", f.state === "outdated" ? "text-amber-500" : "text-muted-foreground")}
+        title={f.detail}
+      >
+        <AlertCircle className="size-3" /> {f.state === "outdated" ? "new commits" : "couldn't check"}
+      </span>
+    );
+  return null;
+}
 
 function RepoBar({
   repos,
@@ -37,6 +75,8 @@ function RepoBar({
   onIndexed,
   onDeleted,
   localAllowed,
+  freshness,
+  onReindex,
 }: {
   repos: Repo[];
   current: Repo | null;
@@ -44,6 +84,8 @@ function RepoBar({
   onIndexed: (r: Repo) => void;
   onDeleted: (r: Repo) => void;
   localAllowed: boolean;
+  freshness: Freshness;
+  onReindex: () => void;
 }) {
   const [adding, setAdding] = useState(!current);
   const [source, setSource] = useState(current ? "" : DEMO_REPO);
@@ -98,7 +140,7 @@ function RepoBar({
             >
               <span className="truncate text-sm font-medium">{current.name}</span>
               <span className="hidden truncate font-mono text-[11px] text-muted-foreground md:inline">
-                {current.files} files{current.commit ? ` · ${current.commit}` : ""} · indexed {timeAgo(current.indexed_at)}
+                {current.files} files{current.commit ? ` · ${shortSha(current.commit)}` : ""} · indexed {timeAgo(current.indexed_at)}
               </span>
               <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
             </button>
@@ -145,9 +187,26 @@ function RepoBar({
             </div>
           )}
         </div>
+        {current && (
+          <div className="hidden shrink-0 sm:block">
+            <FreshnessChip f={freshness} />
+          </div>
+        )}
+        {current && current.kind !== "self" && (
+          <Button
+            size="sm"
+            variant={freshness.state === "outdated" ? "outline" : "ghost"}
+            onClick={onReindex}
+            disabled={freshness.state === "reindexing" || freshness.state === "checking"}
+            title="Rebuild the whole index from the latest code"
+          >
+            <RefreshCw className={cn("size-3.5", freshness.state === "reindexing" && "animate-spin")} />
+            <span className="hidden md:inline">{freshness.state === "reindexing" ? "Reindexing…" : "Reindex"}</span>
+          </Button>
+        )}
         {current && !adding && (
           <Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
-            <Plus className="size-3.5" /> Add repo
+            <Plus className="size-3.5" /> <span className="hidden md:inline">Add repo</span>
           </Button>
         )}
       </div>
@@ -191,6 +250,12 @@ export function Dashboard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [askSeed, setAskSeed] = useState("");
   const [tourSeed, setTourSeed] = useState("");
+  const [freshness, setFreshness] = useState<Freshness>({ state: "idle" });
+  const [indexRev, setIndexRev] = useState(0); // bumps when the index changes → map & tasks reload
+  const currentRef = useRef<Repo | null>(null);
+  const lastCheck = useRef<{ id: string; at: number } | null>(null);
+  const inFlight = useRef(false);
+  currentRef.current = current;
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -217,6 +282,89 @@ export function Dashboard() {
     loadRepos();
     api.health().then(setHealth).catch(() => setHealth(null));
   }, [user, loadRepos]);
+
+  /** Automatic re-index: the server compares commits and re-indexes only changed files. */
+  const checkForUpdates = useCallback(
+    async (repo: Repo) => {
+      if (inFlight.current || repo.kind === "self") return;
+      inFlight.current = true;
+      lastCheck.current = { id: repo.repo_id, at: Date.now() };
+      setFreshness({ state: "checking" });
+      const stillOpen = () => currentRef.current?.repo_id === repo.repo_id;
+      try {
+        const r = await api.checkUpdates(repo.repo_id);
+        if (!stillOpen()) return;
+        if (r.status === "updated") {
+          const n = r.changed_count;
+          toast.success(
+            `${repo.name} has new commits (${shortSha(r.previous_commit) || "?"} → ${shortSha(r.commit)}): re-indexed ${n} changed file${n === 1 ? "" : "s"}`
+          );
+          if (n) setIndexRev((v) => v + 1);
+          loadRepos(repo.repo_id);
+          setFreshness({ state: "up_to_date" });
+        } else if (r.status === "up_to_date") {
+          setFreshness({ state: "up_to_date" });
+        } else if (r.status === "outdated" || r.status === "error") {
+          setFreshness({ state: r.status, detail: r.detail });
+        } else {
+          setFreshness({ state: "idle" });
+        }
+      } catch (e) {
+        if (stillOpen()) setFreshness({ state: "error", detail: e instanceof ApiError ? e.message : "check failed" });
+      } finally {
+        inFlight.current = false;
+      }
+    },
+    [loadRepos]
+  );
+
+  // check when a repo is opened …
+  useEffect(() => {
+    if (current) checkForUpdates(current);
+    else setFreshness({ state: "idle" });
+    // only when the selected repo changes, not when its summary refreshes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.repo_id, checkForUpdates]);
+
+  // … when the user returns to the tab, and periodically while it stays open
+  useEffect(() => {
+    const due = (ms: number) => {
+      const r = currentRef.current;
+      if (!r || document.visibilityState !== "visible") return;
+      const last = lastCheck.current;
+      if (!last || last.id !== r.repo_id || Date.now() - last.at > ms) checkForUpdates(r);
+    };
+    const onFocus = () => due(FOCUS_RECHECK_MS);
+    const timer = window.setInterval(() => due(RECHECK_MS), 60_000);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [checkForUpdates]);
+
+  /** Manual re-index: rebuild everything from the latest code. */
+  async function reindex() {
+    const repo = currentRef.current;
+    if (!repo || inFlight.current) return;
+    inFlight.current = true;
+    setFreshness({ state: "reindexing" });
+    try {
+      const r = await api.reindex(repo.repo_id);
+      toast.success(`Reindexed ${r.name}: ${r.files} files · ${r.chunks} chunks${r.commit ? ` at ${shortSha(r.commit)}` : ""}`);
+      setIndexRev((v) => v + 1);
+      lastCheck.current = { id: repo.repo_id, at: Date.now() };
+      loadRepos(repo.repo_id);
+      setFreshness({ state: "up_to_date" });
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Reindex failed");
+      setFreshness({ state: "error", detail: e instanceof ApiError ? e.message : "reindex failed" });
+    } finally {
+      inFlight.current = false;
+    }
+  }
 
   function select(r: Repo) {
     setCurrent(r);
@@ -314,6 +462,8 @@ export function Dashboard() {
               loadRepos();
             }}
             localAllowed={!!health?.local_ingest}
+            freshness={freshness}
+            onReindex={reindex}
           />
 
           <div className="flex border-b border-border bg-card/40 px-1 sm:hidden">
@@ -332,9 +482,10 @@ export function Dashboard() {
             ))}
           </div>
 
-          {/* every panel stays mounted so results survive tab switches; keyed by repo so they reset on switch */}
+          {/* every panel stays mounted so results survive tab switches; keyed by repo so they reset on switch,
+              and the map and tasks also reload when the index changes (the chat and tours keep their history) */}
           {(["overview", "ask", "tour", "tasks", "docs"] as TabId[]).map((id) => (
-            <div key={`${id}-${repoId}`} className={cn("flex min-h-0 flex-1 flex-col", tab !== id && "hidden")}>
+            <div key={`${id}-${repoId}${id === "overview" || id === "tasks" ? `-${indexRev}` : ""}`} className={cn("flex min-h-0 flex-1 flex-col", tab !== id && "hidden")}>
               {id === "ask" && <AskPanel repoId={repoId} repoName={current?.name || ""} seed={askSeed} onSeedUsed={clearAsk} />}
               {id === "overview" && <OverviewPanel repoId={repoId} busy={busy} setBusy={setBusy} onTour={tourFlow} />}
               {id === "tour" && (
