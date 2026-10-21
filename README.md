@@ -98,7 +98,7 @@ Or run the whole stack, including Postgres with pgvector, in Docker: `docker com
 
 | | |
 |---|---|
-| **Web** | Deploy to your own AWS account on one EC2 instance, with HTTPS and no SSH: [deployment guide](docs/deployment_guide.md) |
+| **Web** | Run it on any Ubuntu server, such as AWS EC2: clone, add `.env`, start. See the [deployment guide](docs/deployment_guide.md) |
 | **macOS and Windows** | Installers (`.dmg`, `.exe`, `.msi`) are built by [GitHub Actions](https://github.com/SurajsinghBayas/sherpa-ai-mentor/actions/workflows/desktop.yml) on every change. Build locally with `make desktop-build`. See [apps/desktop](apps/desktop/README.md) |
 | **CLI** | `curl -fsSL <your-server>/cli/sherpa.py -o sherpa`, then `sherpa login`, `sherpa upload ./project`, `sherpa ask`. See [cli](cli/README.md) |
 
@@ -120,14 +120,14 @@ Details: [Security and privacy](docs/security.md).
 | API | Python 3.11, FastAPI, SQLAlchemy 2, Alembic |
 | Data | Amazon RDS for PostgreSQL with pgvector (SQLite locally) |
 | AI | Kimi K2.5 with Qwen3-Coder and DeepSeek V3.2 fallbacks on Amazon Bedrock; Amazon Nova embeddings; Amazon Polly voice |
-| Hosting | Docker, Caddy (automatic HTTPS), AWS EC2 with SSM, GitHub Actions |
+| Hosting | Ubuntu on AWS EC2, Docker (optional), GitHub Actions |
 
 ## Documentation
 
 | Doc | Contents |
 |---|---|
 | [How Sherpa works](docs/how-it-works.md) | Grounding pipeline, model benchmark, bringing in code, CLI |
-| [Deployment guide](docs/deployment_guide.md) | AWS EC2 on Ubuntu, without SSH, step by step |
+| [Deployment guide](docs/deployment_guide.md) | Run it on an Ubuntu server (AWS EC2) in a few commands |
 | [Database setup](docs/rds_setup.md) | Amazon RDS for PostgreSQL with pgvector |
 | [Configuration](docs/configuration.md) | Every environment variable |
 | [API reference](docs/api.md) | All endpoints, private mode, keeping the index current |
@@ -148,7 +148,6 @@ services/api/   FastAPI app: ingest, retrieval, agents (mentor, overview, tours,
 apps/web/       Next.js app: workspace panels, code viewer, voice mode, landing page
 apps/desktop/   Tauri 2 shell that packages apps/web for macOS and Windows
 cli/            the `sherpa` command (Python standard library only)
-deploy/ec2/     user data, deploy script, Docker Compose and Caddy for one-instance AWS hosting
 evals/          golden questions, eval runner, results, user-study protocol
 docs/           guides and reference
 ```
