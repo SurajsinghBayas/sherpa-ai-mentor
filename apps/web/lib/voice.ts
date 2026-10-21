@@ -23,6 +23,7 @@ const set = (s: Partial<State>) => {
 let usePolly: boolean | null = null; // null until the first attempt
 let run = 0; // bumps on every start/stop, so a stopped narration never resumes
 let audio: HTMLAudioElement | null = null;
+let audible = false; // sound is coming out right now (not between pieces, not while fetching)
 
 /** Markdown answer → text worth hearing: no code blocks, no markup, citations read as file names. */
 export function speakable(md: string): string {
@@ -65,9 +66,10 @@ function playBlob(blob: Blob, mine: number): Promise<void> {
       if (audio === a) audio = null;
       ok && mine === run ? resolve() : reject(new Error("stopped"));
     };
-    a.onended = () => done(true);
-    a.onerror = () => done(false);
-    a.onpause = () => !a.ended && done(false);
+    a.onplaying = () => (audible = true);
+    a.onended = () => ((audible = false), done(true));
+    a.onerror = () => ((audible = false), done(false));
+    a.onpause = () => !a.ended && ((audible = false), done(false));
     a.play().catch(() => done(false));
   });
 }
@@ -82,8 +84,9 @@ function browserSay(text: string, mine: number): Promise<void> {
       voices.find((v) => /^en(-|_)US/i.test(v.lang)) ??
       null;
     u.rate = 1.02;
-    u.onend = () => (mine === run ? resolve() : reject(new Error("stopped")));
-    u.onerror = () => reject(new Error("stopped"));
+    u.onstart = () => (audible = true);
+    u.onend = () => ((audible = false), mine === run ? resolve() : reject(new Error("stopped")));
+    u.onerror = () => ((audible = false), reject(new Error("stopped")));
     speechSynthesis.speak(u);
   });
 }
@@ -138,6 +141,7 @@ export async function say(id: string, text: string): Promise<void> {
 
 export function stop() {
   run++;
+  audible = false;
   audio?.pause();
   audio = null;
   if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
@@ -211,4 +215,65 @@ export function isUserSpeech(heard: string, speaking: string): boolean {
   const mine = w.slice(1).map((x, i) => `${w[i]} ${x}`);
   const echoed = mine.filter((p) => pairs.has(p)).length;
   return echoed / mine.length < 0.35;
+}
+
+/* ── barge-in by sound level: hears the user over Sherpa's own voice ── */
+
+const TICK_MS = 40;
+
+/** Decides, from mic levels (dBFS) sampled every TICK_MS, when the user starts talking over
+ *  Sherpa. It first learns how loud Sherpa's own voice is in the mic after echo cancellation
+ *  (the loud end of `calibrateMs` of playback), then fires once the mic stays `riseDb` above
+ *  that for `holdMs`. The floor drifts slowly so a louder sentence doesn't count as the user. */
+export function createVoiceDetector({ calibrateMs = 1200, riseDb = 12, holdMs = 240 } = {}) {
+  const cal: number[] = [];
+  let floor: number | null = null;
+  let loud = 0;
+  return (level: number, playing: boolean): boolean => {
+    if (floor === null) {
+      if (playing) cal.push(level);
+      if (cal.length * TICK_MS < calibrateMs) return false;
+      cal.sort((x, y) => x - y);
+      floor = Math.max(cal[Math.floor(cal.length * 0.9)], -75);
+      return false;
+    }
+    if (level > floor + riseDb) {
+      loud += TICK_MS;
+      return loud >= holdMs;
+    }
+    loud = Math.max(0, loud - TICK_MS);
+    floor = Math.max(floor + (level - floor) * 0.01, -75);
+    return false;
+  };
+}
+
+/** Watch the mic while Sherpa speaks and call `onVoice` once when the user talks over it.
+ *  Uses the browser's echo cancellation, so what the speakers play mostly cancels out.
+ *  Rejects if the mic can't be opened; the returned function releases it. */
+export async function watchForVoice(onVoice: () => void): Promise<() => void> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false },
+  });
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  const buf = new Float32Array(analyser.fftSize);
+  const heard = createVoiceDetector();
+  let fired = false;
+  const timer = window.setInterval(() => {
+    analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (const x of buf) sum += x * x;
+    const level = 10 * Math.log10(sum / buf.length + 1e-10);
+    if (!fired && heard(level, audible)) {
+      fired = true;
+      onVoice();
+    }
+  }, TICK_MS);
+  return () => {
+    window.clearInterval(timer);
+    stream.getTracks().forEach((t) => t.stop());
+    ctx.close().catch(() => {});
+  };
 }

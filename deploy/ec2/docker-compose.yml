@@ -1,0 +1,42 @@
+# Production on one EC2 instance: Caddy (HTTPS) in front of the web app and the API.
+# Started by deploy.sh, which sets DOMAIN; the API's settings come from /opt/sherpa/sherpa.env
+# (pulled from SSM Parameter Store). The database is Amazon RDS, not a container.
+services:
+  api:
+    build: ../../services/api
+    env_file: /opt/sherpa/sherpa.env
+    environment:
+      - ENVIRONMENT=production
+      - ALLOW_LOCAL_INGEST=false
+      - ALLOWED_ORIGINS=https://${DOMAIN}
+    volumes:
+      - api-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../../apps/web
+      args:
+        NEXT_PUBLIC_API_URL: https://${DOMAIN}
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.8.4
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+
+volumes:
+  api-data:
+  caddy-data:   # TLS certificates; kept so a redeploy doesn't request new ones
+  caddy-config:

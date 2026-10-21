@@ -14,6 +14,9 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000
 COPY --from=build /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/.next ./.next
+# images, mascots and the landing film; next.config.js carries the security headers
+COPY --from=build /app/public ./public
+COPY --from=build /app/next.config.js ./
 USER node
 EXPOSE 3000
 CMD ["sh", "-c", "exec npx next start -H 0.0.0.0 -p ${PORT}"]

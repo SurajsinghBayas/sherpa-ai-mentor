@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Mic, X } from "lucide-react";
 import { Sherpa, type Pose } from "../sherpa";
 import { Button } from "../ui/primitives";
-import { isUserSpeech, listen, say, stop as stopSpeech, useSpeaking } from "../../lib/voice";
+import { isUserSpeech, listen, say, stop as stopSpeech, useSpeaking, watchForVoice } from "../../lib/voice";
 import { cn } from "../../lib/utils";
 import { ease } from "./shared";
 
@@ -87,52 +87,83 @@ export function VoiceMode({
     }
   }
 
-  /** Speak `a` while listening for the user talking over it. Returns what they said if they
-   *  interrupted (it becomes the next question), or "" when Sherpa finished or was tapped. */
+  /** Speak `a` while listening for the user talking over it, two ways: the mic's sound level
+   *  (echo-cancelled, so Sherpa's own voice mostly doesn't count) and the transcript (words that
+   *  aren't the answer's). Returns what they said when the transcript caught it; otherwise ""
+   *  (Sherpa finished, was tapped, or heard a voice by level), and the loop listens next. */
   async function speakInterruptibly(a: string, live: () => boolean): Promise<string> {
-    let barged = false;
+    // changed from callbacks, so kept on one object (TypeScript can't follow closures' writes)
+    const st = {
+      speaking: true,
+      barged: "" as "" | "words" | "level",
+      watcher: null as { done: Promise<string>; stop: () => void } | null,
+      releaseMic: null as (() => void) | null,
+    };
     let from = 0;
     let said = "";
     let quiet: ReturnType<typeof setTimeout> | undefined;
-    let watcher: { done: Promise<string>; stop: () => void } | null = null;
-    try {
-      watcher = listen(
-        (_, phrases) => {
-          if (!barged) {
-            const latest = phrases[phrases.length - 1] ?? "";
-            if (!isUserSpeech(latest, a)) return; // Sherpa hearing itself
-            barged = true;
-            from = phrases.length - 1;
-            stopSpeech();
-            setPhase("listening");
-          }
-          said = phrases.slice(from).join(" ").trim();
-          setHeard(said);
-          clearTimeout(quiet);
-          quiet = setTimeout(() => watcher?.stop(), 1200); // a pause ends the question
-        },
-        { continuous: true, keepSpeaking: true }
-      );
-      rec.current = watcher;
-    } catch {
-      watcher = null; // no recognition: tap to interrupt still works
-    }
+    let restarts = 0;
+
+    const onText = (_: string, phrases: string[]) => {
+      if (st.barged === "level") return; // the loop takes the question with a fresh listen
+      if (!st.barged) {
+        const latest = phrases[phrases.length - 1] ?? "";
+        if (!isUserSpeech(latest, a)) return; // Sherpa hearing itself
+        st.barged = "words";
+        from = phrases.length - 1;
+        stopSpeech();
+        setPhase("listening");
+      }
+      said = phrases.slice(from).join(" ").trim();
+      setHeard(said);
+      clearTimeout(quiet);
+      quiet = setTimeout(() => st.watcher?.stop(), 1200); // a pause ends the question
+    };
+    const watch = () => {
+      try {
+        const w = listen(onText, { continuous: true, keepSpeaking: true });
+        st.watcher = w;
+        rec.current = w;
+        // the browser ends recognition after a stretch without clear speech: start it again
+        w.done.then(
+          () => {
+            if (st.watcher === w && st.speaking && !st.barged && live() && ++restarts < 30) watch();
+          },
+          () => {}
+        );
+      } catch {
+        st.watcher = null; // no recognition: the level watch and tapping still work
+      }
+    };
+    watch();
+    watchForVoice(() => {
+      if (st.barged || !st.speaking) return;
+      st.barged = "level";
+      stopSpeech();
+      setPhase("listening");
+      setHeard("");
+    }).then(
+      (release) => (st.speaking ? (st.releaseMic = release) : release()),
+      () => {} // mic unavailable for level checks: words and tapping still work
+    );
+
     try {
       await say("voice-mode", a);
     } catch {
       // interrupted by voice or by a tap
     }
-    if (!barged || !live()) {
+    st.speaking = false;
+    st.releaseMic?.();
+    if (st.barged === "words" && live()) {
+      await st.watcher?.done.catch(() => ""); // until a pause ends the question
+    } else {
       clearTimeout(quiet);
-      watcher?.stop();
-      await watcher?.done.catch(() => "");
-      rec.current = null;
-      return "";
+      st.watcher?.stop();
+      await st.watcher?.done.catch(() => "");
     }
-    await watcher?.done.catch(() => "");
     clearTimeout(quiet);
     rec.current = null;
-    return said;
+    return st.barged === "words" && live() ? said : "";
   }
 
   function tap() {
