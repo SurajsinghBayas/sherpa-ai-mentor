@@ -1,4 +1,5 @@
 """Ingest: clone a GitHub URL or walk a local path into chunked snapshot."""
+import base64
 import hashlib
 import logging
 import os
@@ -8,6 +9,7 @@ import subprocess
 import tempfile
 import time
 from typing import List, Tuple
+from urllib.parse import urlparse
 
 from .chunk import Chunk, chunk_file
 from .config import settings
@@ -131,18 +133,47 @@ def _dir_bytes(root: str) -> int:
     return total
 
 
-def _git_error(stderr: str) -> str:
+def _git_error(stderr: str, with_token: bool = False) -> str:
     s = (stderr or "").lower()
     if "remote branch" in s and "not found" in s:
         return "branch not found"
+    # GitHub answers a token without Contents access with 403 "Write access … not granted"
+    if "error: 403" in s or "not granted" in s or "permission" in s:
+        if with_token:
+            return ("the access token can't read this repository: give it read-only Contents "
+                    "access to this repo (for an org repo, the org may need to approve it)")
+        return "access denied: the repository is private; turn on Private mode and add a token"
     if "not found" in s or "could not read username" in s or "authentication" in s:
-        return "repository not found, or it is private (only public repositories are supported)"
+        if with_token:
+            return "the access token was rejected, or it can't read this repository"
+        return ("repository not found, or it is private: turn on Private mode and add a "
+                "read-only access token")
     if "could not resolve host" in s or "unable to access" in s:
         return "couldn't reach the git host; try again shortly"
     return "git clone failed"
 
 
-def _clone(url: str, branch: str) -> str:
+# username each host expects alongside an access token in HTTP basic auth
+_TOKEN_USER = {"github.com": "x-access-token", "gitlab.com": "oauth2", "bitbucket.org": "x-token-auth"}
+
+
+def _token_env(url: str, token: str) -> dict:
+    """Git config (via environment, so it's not on the command line, in the URL, or written to
+    .git/config) that sends the token as an auth header. Redirects are refused so the header
+    can't follow the clone to another host."""
+    if not token:
+        return {}
+    host = (urlparse(url).hostname or "").lower()
+    user = next((u for h, u in _TOKEN_USER.items() if host == h or host.endswith("." + h)),
+                "x-access-token")
+    basic = base64.b64encode(f"{user}:{token}".encode()).decode()
+    return {"GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_0": "http.extraHeader",
+            "GIT_CONFIG_VALUE_0": f"Authorization: Basic {basic}",
+            "GIT_CONFIG_KEY_1": "http.followRedirects", "GIT_CONFIG_VALUE_1": "false"}
+
+
+def _clone(url: str, branch: str, token: str = "") -> str:
     """Shallow, hardened clone into a fresh temp dir. The dir is removed on any failure."""
     tmp = tempfile.mkdtemp(prefix="sherpa-")
     dest = os.path.join(tmp, "repo")
@@ -154,7 +185,8 @@ def _clone(url: str, branch: str) -> str:
     try:
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True,
-                           timeout=settings.clone_timeout_seconds, env={**os.environ, **_GIT_ENV})
+                           timeout=settings.clone_timeout_seconds,
+                           env={**os.environ, **_GIT_ENV, **_token_env(url, token)})
         except subprocess.TimeoutExpired:
             raise IngestError(f"clone took longer than {settings.clone_timeout_seconds}s; "
                               "the repository is too large")
@@ -249,23 +281,25 @@ def remote_head(repo_url: str, branch: str = "") -> str:
 
 
 def fetch_source(repo_url: str | None, local_path: str | None,
-                 branch: str = "") -> Tuple[dict, dict]:
-    """Clone (or open) a source and read its files without chunking. Returns (sources, meta)."""
+                 branch: str = "", token: str = "") -> Tuple[dict, dict]:
+    """Clone (or open) a source and read its files without chunking. Returns (sources, meta).
+
+    `token` (private repos) is only used for this clone and is never stored."""
     cleanup = None
     commit = ""
     if repo_url:
         try:
-            root = _clone(repo_url, branch)
+            root = _clone(repo_url, branch, token)
         except subprocess.CalledProcessError as e:
             if not branch or "not found" not in (e.stderr or "").lower():
-                raise IngestError(_git_error(e.stderr)) from e
+                raise IngestError(_git_error(e.stderr, bool(token))) from e
             # many repos use master/trunk — retry on the default branch, and say so
             log.warning("ingest: branch %r not found for %s (%s); cloning default branch",
                         branch, repo_url, (e.stderr or "").strip()[:160])
             try:
-                root = _clone(repo_url, "")
+                root = _clone(repo_url, "", token)
             except subprocess.CalledProcessError as e2:
-                raise IngestError(_git_error(e2.stderr)) from e2
+                raise IngestError(_git_error(e2.stderr, bool(token))) from e2
             branch = ""
         cleanup = os.path.dirname(root)
         source = repo_url
@@ -298,10 +332,10 @@ def fetch_source(repo_url: str | None, local_path: str | None,
     return sources, meta
 
 
-def ingest_source(repo_url: str | None, local_path: str | None,
-                  branch: str = "main") -> Tuple[str, List[Chunk], dict, dict]:
+def ingest_source(repo_url: str | None, local_path: str | None, branch: str = "main",
+                  token: str = "") -> Tuple[str, List[Chunk], dict, dict]:
     """Returns (repo_id, chunks, meta, sources)."""
-    sources, meta = fetch_source(repo_url, local_path, branch)
+    sources, meta = fetch_source(repo_url, local_path, branch, token)
     chunks = chunk_sources(sources)
     if not chunks:
         raise IngestError("no readable source files found in the repository")

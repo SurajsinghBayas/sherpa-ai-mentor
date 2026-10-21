@@ -1,6 +1,7 @@
 """Sherpa API — FastAPI routes. All answers cite file:line."""
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -21,6 +22,7 @@ from .agents.mentor import answer_question
 from .agents.overview import build_overview
 from .agents.tasks import suggest_starter_tasks
 from .agents.tour import build_tour
+from . import private
 from .config import production_problems, production_warnings, settings
 from .db import engine as _engine, get_session, init_db
 from .guards import check_branch, check_outbound_url, enforce, normalize_repo_url
@@ -62,7 +64,10 @@ async def lifespan(_: FastAPI):
              settings.allow_local_ingest)
     if not llm.available:
         log.warning("startup: no usable LLM credentials; agents will use offline fallbacks")
+    private.purge_orphans()  # private code lived in the previous process's memory only
+    stop_sweeper = private.start_sweeper()
     yield
+    stop_sweeper.set()
 
 
 # interactive API docs are a dev tool; production doesn't publish its schema
@@ -234,6 +239,13 @@ def get_store(repo_id: str, user, db: Session) -> RepoStore:
     row = db.get(Repo, repo_id)
     if row is None or row.owner_id != user.id:  # never reveal other users' repos
         raise HTTPException(404, f"unknown repo_id {repo_id!r}; POST /api/ingest first")
+    if row.private:
+        s = private.get(repo_id)
+        if s is None or row.expires_at < time.time():
+            private.end([repo_id], "expired" if s else "not in memory")
+            raise HTTPException(410, "this private repo's session ended and its code was wiped; "
+                                     "import it again to keep going")
+        return s
     with _stores_lock:
         cached = _stores.get(repo_id)
         if cached is not None and cached.version == row.version:
@@ -297,11 +309,25 @@ def _resolve_llm(key_id: str | None, endpoint_id: str | None, user, db: Session)
     return {}
 
 
+def _token(req: IngestRequest) -> str:
+    """The access token, if any, after a shape check (it goes into an HTTP header)."""
+    t = req.token.get_secret_value().strip() if req.token else ""
+    if t and (len(t) > 512 or not re.fullmatch(r"[A-Za-z0-9_.\-]+", t)):
+        raise HTTPException(422, "that doesn't look like an access token")
+    return t
+
+
 def _validate_source(req: IngestRequest) -> IngestRequest:
-    """Normalised copy of the request; public code hosts only (SSRF guard), safe branch name."""
+    """Normalised copy of the request; public code hosts only (SSRF guard), safe branch name.
+
+    A token means a private repo, so it always turns on private mode."""
+    token = _token(req)
     if req.repo_url and req.repo_url.strip():
         return IngestRequest(repo_url=normalize_repo_url(req.repo_url), local_path=None,
-                             branch=check_branch(req.branch))
+                             branch=check_branch(req.branch), private=req.private or bool(token),
+                             token=token or None)
+    if token:
+        raise HTTPException(422, "an access token only applies to a repository URL")
     if not req.local_path:
         raise HTTPException(422, "provide repo_url or local_path")
     if not settings.allow_local_ingest:
@@ -316,27 +342,50 @@ def _diff(old: dict, new: dict) -> dict:
 
 
 def _index(repo_url: str | None, local_path: str | None, branch: str, user,
-           db: Session) -> tuple[RepoStore, dict]:
+           db: Session, is_private: bool = False, token: str = "") -> tuple[RepoStore, dict]:
     """Ingest a source into the caller's account; if indexed before, report what changed."""
     with _IngestSlot(user.id):
         try:
-            _, chunks, meta, sources = ingest_source(repo_url, local_path, branch)
+            _, chunks, meta, sources = ingest_source(repo_url, local_path, branch, token)
         except (IngestError, ValueError) as e:  # messages written for the user
             log.warning("ingest failed source=%s: %s", repo_url or local_path, e)
             raise HTTPException(400, f"ingest failed: {str(e)[:300]}")
         except Exception:  # noqa: BLE001 — unexpected: log it, don't leak internals
             log.exception("ingest crashed source=%s", repo_url or local_path)
             raise HTTPException(500, "ingest failed unexpectedly; please try again")
+    if is_private:
+        return _save_private(repo_id_for(f"{user.id}:private:{meta['source']}"), chunks, meta,
+                             sources, user, db)
     return _save_snapshot(repo_id_for(f"{user.id}:{meta['source']}"), chunks, meta, sources, user, db)
 
 
-def _save_snapshot(repo_id: str, chunks, meta: dict, sources: dict, user,
-                   db: Session) -> tuple[RepoStore, dict]:
+def _check_repo_limit(repo_id: str, user, db: Session) -> None:
     if db.get(Repo, repo_id) is None:
         owned = db.query(Repo).filter(Repo.owner_id == user.id).count()
         if owned >= settings.max_repos_per_user:
             raise HTTPException(429, f"repo limit reached ({settings.max_repos_per_user}); "
                                      "delete one before indexing another")
+
+
+def _save_private(repo_id: str, chunks, meta: dict, sources: dict, user,
+                  db: Session) -> tuple[RepoStore, dict]:
+    """Private mode: the snapshot is held in memory only (see app/private.py)."""
+    _check_repo_limit(repo_id, user, db)
+    if private.get(repo_id) is None and private.count() >= settings.max_private_repos:
+        raise HTTPException(503, "the server is holding as many private repos as it can; "
+                                 "try again later")
+    t0 = time.time()
+    store = private.new_store(repo_id, user.id)
+    store.save(chunks, meta, sources)
+    private.put(store)
+    log.info("ingest ok (private, memory only) repo_id=%s files=%d chunks=%d in %.1fs", repo_id,
+             len(store.files()), len(chunks), time.time() - t0)
+    return store, {}
+
+
+def _save_snapshot(repo_id: str, chunks, meta: dict, sources: dict, user,
+                   db: Session) -> tuple[RepoStore, dict]:
+    _check_repo_limit(repo_id, user, db)
     store = RepoStore(repo_id, SqlBackend(repo_id, user.id))
     old_hashes = dict(store.meta.get("file_hashes", {}))
     t0 = time.time()
@@ -356,7 +405,8 @@ def _summary(row: Repo, has_docs: bool) -> dict:
     return {"repo_id": row.id, "name": row.name or row.source or row.id, "source": row.source,
             "kind": row.kind, "commit": row.commit, "indexed_at": row.indexed_at,
             "files": row.files_count, "chunks": row.chunks_count,
-            "languages": row.languages or [], "has_docs": has_docs}
+            "languages": row.languages or [], "has_docs": has_docs,
+            "private": bool(row.private), "expires_at": row.expires_at if row.private else None}
 
 
 def _repo_summary(s: RepoStore, db: Session) -> dict:
@@ -373,7 +423,8 @@ def health():
                     "fallbacks": llm.fallback_models, "available": llm.available},
             "embeddings": {"model": embedder.model,
                            "available": embedder.available and vectors_supported()},
-            "local_ingest": settings.allow_local_ingest}
+            "local_ingest": settings.allow_local_ingest,
+            "private_ttl_hours": settings.private_ttl_hours}
 
 
 # The CLI is one stdlib-only file; serving it here means anyone signed in to this
@@ -411,8 +462,15 @@ def ready():
 @app.get("/api/repos")
 def repos(user=Depends(get_current_user), db: Session = Depends(get_session)):
     rows = db.query(Repo).filter(Repo.owner_id == user.id).order_by(Repo.indexed_at.desc()).all()
+    # private repos whose time is up (or whose memory is gone) are wiped before listing
+    ended = [r.id for r in rows if r.private and
+             (r.expires_at < time.time() or private.get(r.id) is None)]
+    if ended:
+        private.end(ended, "expired")
+        rows = [r for r in rows if r.id not in ended]
     with_docs = {r for (r,) in db.query(RepoArtifact.repo_id).filter(
         RepoArtifact.name == "docs", RepoArtifact.repo_id.in_([r.id for r in rows]))}
+    with_docs |= {r.id for r in rows if r.private and private.get(r.id).cache_get("docs")}
     return {"repos": [_summary(r, r.id in with_docs) for r in rows]}
 
 
@@ -423,6 +481,7 @@ def delete_repo(repo_id: str, user=Depends(get_current_user), db: Session = Depe
         raise HTTPException(404, "repo not found")
     db.delete(row)  # files, chunks and artifacts cascade; shared embeddings are kept
     db.commit()
+    private.drop(repo_id)  # a private repo's code and vectors go with it
     with _stores_lock:
         _stores.pop(repo_id, None)
     _last_check.pop(repo_id, None)
@@ -434,7 +493,8 @@ def ingest(req: IngestRequest, request: Request, user=Depends(get_current_user),
     _check_rate(request, "ingest", user)
     req = _validate_source(req)
     _charge(db, user, "ingest")
-    store, changes = _index(req.repo_url, req.local_path, req.branch, user, db)
+    store, changes = _index(req.repo_url, req.local_path, req.branch, user, db,
+                            is_private=req.private, token=_token(req))
     return {**_repo_summary(store, db), "changes": changes}
 
 
@@ -511,7 +571,8 @@ def check_for_updates(repo_id: str, request: Request, user=Depends(get_current_u
     _check_rate(request, "check", user)
     old = get_store(repo_id, user, db)
     kind, current = old.meta.get("kind"), old.meta.get("commit") or ""
-    if kind in ("self", "upload"):  # no remote to compare with; uploads update by re-uploading
+    # no remote to compare with (uploads update by re-uploading); private repos keep no token
+    if kind in ("self", "upload") or isinstance(old.backend, private.PrivateBackend):
         return {"status": "unsupported", "commit": current}
     src = _source_of(old)
     if src.repo_url:
@@ -556,6 +617,9 @@ def sync(req: SyncRequest, request: Request, user=Depends(get_current_user),
     refresh any docs sections the change made stale."""
     _check_rate(request, "sync", user)
     old = get_store(req.repo_id, user, db)
+    if isinstance(old.backend, private.PrivateBackend):
+        raise HTTPException(422, "private repos aren't synced, because no token is kept; "
+                                 "import it again to pick up changes")
     _source_of(old)  # validate before spending quota
     _charge(db, user, "ingest")
     store, changes = _reindex(old, user, db, full=req.full)

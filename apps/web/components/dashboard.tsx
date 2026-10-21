@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import {
   AlertCircle, BookOpen, CheckCircle2, ChevronsUpDown, Command as CommandIcon, Ellipsis, FolderGit2, ListTodo,
-  Map, MessageSquare, Moon, Plus, RefreshCw, Route, Search, Trash2, Upload,
+  Lock, Map, MessageSquare, Moon, Plus, RefreshCw, Route, Search, Trash2, Upload,
 } from "lucide-react";
 import { api, ApiError, type Health, type Repo } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -19,7 +19,7 @@ import { Button, ConfirmDialog, Kbd, Menu, Tooltip } from "./ui/primitives";
 import { AskPanel } from "./workspace/ask-panel";
 import { DocsPanel } from "./workspace/docs-panel";
 import { OverviewPanel } from "./workspace/overview-panel";
-import { Dots, timeAgo } from "./workspace/shared";
+import { Dots, timeAgo, timeLeft } from "./workspace/shared";
 import { TasksPanel } from "./workspace/tasks-panel";
 import { TourPanel } from "./workspace/tour-panel";
 
@@ -94,12 +94,14 @@ function RepoSwitcher({
         )}
       >
         <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-          <FolderGit2 className="size-4" />
+          {current?.private ? <Lock className="size-4" /> : <FolderGit2 className="size-4" />}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-medium">{current ? current.name : "No repository"}</span>
           <span className="block truncate text-[11px] text-muted-foreground">
-            {current ? `${current.files} files · ${timeAgo(current.indexed_at) || "indexed"}` : "Add one to begin"}
+            {current
+              ? `${current.files} files · ${current.private ? `private, ${timeLeft(current.expires_at)}` : timeAgo(current.indexed_at) || "indexed"}`
+              : "Add one to begin"}
           </span>
         </span>
         <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
@@ -109,7 +111,7 @@ function RepoSwitcher({
         <div className="scroll-thin max-h-72 overflow-y-auto">
           {repos.map((r) => (
             <Menu.Item key={r.repo_id} onClick={() => onSelect(r)} className={cn(r.repo_id === current?.repo_id && "bg-secondary/60")}>
-              <FolderGit2 />
+              {r.private ? <Lock aria-label="Private" /> : <FolderGit2 />}
               <span className="min-w-0 flex-1 truncate">{r.name}</span>
               <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{r.files}</span>
             </Menu.Item>
@@ -142,19 +144,32 @@ function RepoBar({
   onDelete: () => void;
   onPalette: () => void;
 }) {
-  const canReindex = current && current.kind !== "self" && current.kind !== "upload";
+  // while the add form is open, the bar is about that, not the repo behind it
+  const repo = adding ? null : current;
+  const canReindex = repo && repo.kind !== "self" && repo.kind !== "upload" && !repo.private;
   return (
     <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background px-4">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        {current ? (
+        {repo ? (
           <>
-            <h1 className="hidden truncate text-sm font-semibold sm:block">{current.name}</h1>
+            <h1 className="hidden truncate text-sm font-semibold sm:block">{repo.name}</h1>
             <span className="hidden truncate font-mono text-[11px] text-muted-foreground md:inline">
-              {current.commit ? shortSha(current.commit) : current.kind}
+              {repo.commit ? shortSha(repo.commit) : repo.kind}
             </span>
-            <span className="hidden sm:block">
-              <FreshnessChip f={freshness} />
-            </span>
+            {repo.private ? (
+              <Tooltip
+                side="bottom"
+                content="Code is held in server memory only and never saved. It's wiped when this expires, when you delete it, or if the server restarts."
+              >
+                <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  <Lock className="size-3" /> Private · {timeLeft(repo.expires_at)}
+                </span>
+              </Tooltip>
+            ) : (
+              <span className="hidden sm:block">
+                <FreshnessChip f={freshness} />
+              </span>
+            )}
           </>
         ) : (
           <h1 className="text-sm font-semibold">Add a repository</h1>
@@ -167,7 +182,7 @@ function RepoBar({
         </Button>
       </Tooltip>
 
-      {current && current.kind === "upload" && !adding && (
+      {repo && repo.kind === "upload" && (
         <Button size="sm" variant="outline" onClick={onAdd} title="Upload a new version; only changed files are re-indexed">
           <Upload className="size-3.5" /> <span className="hidden lg:inline">Upload new version</span>
         </Button>
@@ -185,7 +200,7 @@ function RepoBar({
           <span className="hidden lg:inline">{freshness.state === "reindexing" ? "Reindexing…" : "Reindex"}</span>
         </Button>
       )}
-      {current && (
+      {repo && (
         <Menu.Root>
           <Menu.Trigger
             aria-label="More actions"
@@ -199,7 +214,7 @@ function RepoBar({
             </Menu.Item>
             <Menu.Separator />
             <Menu.Item onClick={onDelete} className="text-destructive [&_svg]:text-destructive">
-              <Trash2 /> Delete {current.name}
+              <Trash2 /> Delete {repo.name}
             </Menu.Item>
           </Menu.Popup>
         </Menu.Root>
@@ -284,7 +299,7 @@ export function Dashboard() {
   /** Automatic re-index: the server compares commits and re-indexes only changed files. */
   const checkForUpdates = useCallback(
     async (repo: Repo) => {
-      if (inFlight.current || repo.kind === "self") return;
+      if (inFlight.current || repo.kind === "self" || repo.private) return;
       inFlight.current = true;
       lastCheck.current = { id: repo.repo_id, at: Date.now() };
       setFreshness({ state: "checking" });
@@ -315,6 +330,20 @@ export function Dashboard() {
     },
     [loadRepos]
   );
+
+  // a private repo: keep its countdown current, and when it expires say so and drop it
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!current?.private || !current.expires_at) return;
+    const { name, expires_at } = current;
+    const t = window.setInterval(() => {
+      if (Date.now() / 1000 < expires_at) return setTick((n) => n + 1);
+      window.clearInterval(t);
+      toast.info(`The private session for ${name} ended, and its code was wiped from memory.`);
+      loadRepos();
+    }, 30_000);
+    return () => window.clearInterval(t);
+  }, [current?.repo_id, current?.private, current?.expires_at, current?.name, loadRepos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // check when a repo is opened …
   useEffect(() => {
@@ -416,7 +445,7 @@ export function Dashboard() {
       run: () => select(r),
     })),
     { id: "add", group: "Actions", label: "Add a repository", icon: <Plus />, run: () => setAdding(true) },
-    ...(current && current.kind !== "self" && current.kind !== "upload"
+    ...(current && current.kind !== "self" && current.kind !== "upload" && !current.private
       ? [{ id: "reindex", group: "Actions", label: `Reindex ${current.name}`, icon: <RefreshCw />, run: reindex }]
       : []),
     {
@@ -492,6 +521,7 @@ export function Dashboard() {
             <div className="scroll-thin max-h-[70dvh] shrink-0 overflow-y-auto border-b border-border bg-card px-4 pb-4">
               <ImportSource
                 localAllowed={!!health?.local_ingest}
+                privateTtlHours={health?.private_ttl_hours}
                 onIndexed={(id) => {
                   setAdding(false);
                   try {

@@ -31,6 +31,9 @@ def text_hash(s: str) -> str:
 
 
 def vectors_supported() -> bool:
+    # init_db() records whether pgvector could be enabled; before that, assume Postgres has it
+    if dbmod.vectors_ready is not None:
+        return dbmod.vectors_ready
     return dbmod.engine.dialect.name == "postgresql"
 
 

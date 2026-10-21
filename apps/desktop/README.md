@@ -1,6 +1,6 @@
 # Sherpa AI for desktop
 
-A native macOS app for Sherpa AI, built with [Tauri 2](https://tauri.app). It is the same React + TypeScript + Tailwind app as `apps/web`, not a copy:
+A native macOS and Windows app for Sherpa AI, built with [Tauri 2](https://tauri.app). It is the same React + TypeScript + Tailwind app as `apps/web`, not a copy:
 
 ```
             apps/web (React + TypeScript + Tailwind, Next.js)
@@ -9,7 +9,7 @@ A native macOS app for Sherpa AI, built with [Tauri 2](https://tauri.app). It is
             apps/desktop (Tauri 2: native window + bundler)
                  │
         ┌────────┴─────────┐
-   macOS build        Windows build (later)
+   macOS build        Windows build (CI)
  Sherpa AI.app/.dmg    Sherpa AI.exe/.msi
         └────────┬─────────┘
                  ▼
@@ -75,12 +75,18 @@ The API must allow the app's origin. It does by default through `DESKTOP_ORIGINS
 3. Turn on a Content Security Policy: `app.security.csp` in `src-tauri/tauri.conf.json` is `null` while the API is local. Set it to allow `connect-src` only for the API.
 4. Bump `version` in `src-tauri/tauri.conf.json` and `package.json` for each release. Add the updater plugin if you want in-app updates.
 
-## Windows (later)
+## Windows
 
-The same code builds on Windows: run `npm run build` on a Windows machine (or a CI runner) with Rust and the WebView2 runtime. Two things to add first:
+Windows installers are built on GitHub Actions (`.github/workflows/desktop.yml`), on a real Windows runner, so no Windows machine is needed. It runs on every push to `main` that touches `apps/web` or `apps/desktop`, on `v*` tags, and on demand (Actions → desktop → Run workflow). Each run uploads:
 
-- `build:desktop` in `apps/web/package.json` uses POSIX shell syntax for its environment variables; switch it to `cross-env`.
-- Windows code signing for the installer.
+| Artifact | Contents |
+|---|---|
+| `sherpa-ai-windows` | `Sherpa AI_0.1.0_x64_en-US.msi` and `Sherpa AI_0.1.0_x64-setup.exe` |
+| `sherpa-ai-macos-arm64` | `Sherpa AI_0.1.0_aarch64.dmg` |
+
+Set the repository variable `SHERPA_API_URL` to the deployed API; without it the apps call `http://localhost:8000`. The Windows installer is unsigned, so SmartScreen warns on first run (**More info → Run anyway**) until a code-signing certificate is added. The installer fetches the WebView2 runtime if Windows doesn't already have it.
+
+To build on a Windows machine instead: install Rust and Node, run `npm install` in `apps/web` and `apps/desktop`, then `npx tauri build --bundles msi,nsis` in `apps/desktop`.
 
 ## Files
 

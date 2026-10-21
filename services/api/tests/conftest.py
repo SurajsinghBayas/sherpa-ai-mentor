@@ -10,6 +10,13 @@ def offline_llm(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_embeddings(monkeypatch):
+    """.env may hold a Bedrock key — tests must never call (and pay for) the real embedder."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "aws_bearer_token_bedrock", "")
+
+
+@pytest.fixture(autouse=True)
 def no_real_email(monkeypatch):
     """.env may hold real SMTP credentials — tests must never send mail."""
     from app.config import settings

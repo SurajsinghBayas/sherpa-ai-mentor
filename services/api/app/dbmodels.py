@@ -14,8 +14,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import (JSON, DateTime, Float, ForeignKey, Index, Integer, LargeBinary, String,
-                        Text, func)
+from sqlalchemy import (JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, LargeBinary,
+                        String, Text, false, func)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -115,6 +115,9 @@ class Repo(Base):
     languages: Mapped[list] = mapped_column(JSON, default=list)
     meta: Mapped[dict] = mapped_column(JSON, default=dict)  # roles, file_hashes, …
     version: Mapped[int] = mapped_column(Integer, default=0)
+    # private mode (app/private.py): code lives in memory only; the row is deleted at expires_at
+    private: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    expires_at: Mapped[float] = mapped_column(Float, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                                  server_default=func.now())
 

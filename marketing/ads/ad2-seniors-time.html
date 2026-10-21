@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sherpa AI · Your seniors' afternoons (30s)</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  .big { font-size: 260px; font-weight: 700; letter-spacing: -0.05em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .msg { display: flex; gap: 22px; align-items: flex-start; padding: 22px 0; border-bottom: 2px solid #efe9df; }
+  .msg .av { width: 70px; height: 70px; border-radius: 18px; background: var(--tan); color: var(--navy); font-weight: 700; font-size: 32px; display: grid; place-items: center; flex: none; }
+  .msg .who { font-size: 28px; color: var(--muted); }
+  .msg .txt { font-size: 38px; margin-top: 4px; }
+  .again { font-size: 24px; font-weight: 600; color: #9a4d12; background: #fcebd9; border-radius: 999px; padding: 6px 16px; margin-left: 12px; vertical-align: middle; }
+  .verified { display: inline-flex; align-items: center; gap: 10px; font-size: 27px; font-weight: 600; color: #1f7a4d; background: #e7f4ec; border-radius: 999px; padding: 8px 20px; }
+  .stop { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 30px; }
+  .stop .dot { width: 76px; height: 76px; border-radius: 50%; border: 4px solid #cfc6b8; background: var(--paper); display: grid; place-items: center; font-size: 34px; font-weight: 700; color: var(--muted); flex: none; }
+  .stop.on .dot { border-color: var(--blue); background: var(--blue); color: #fff; }
+  .stop .t { font-size: 42px; font-weight: 600; }
+  .stop .l { font-family: "Geist Mono", monospace; font-size: 26px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
+  .row { display: flex; justify-content: space-between; font-family: "Geist Mono", monospace; font-size: 30px; padding: 16px 0; border-top: 2px solid #efe9df; }
+  .end { inset: 0; background: var(--navy); color: var(--cream); }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="abs brand" id="brand"><img class="pixel" src="assets/head.svg" alt="" />Sherpa <b>AI</b></div>
+
+  <!-- 1 · the number -->
+  <div class="abs center big" id="num" style="top:470px">0.0</div>
+  <div class="abs center h2" id="num-unit" style="top:740px">months</div>
+  <div class="abs center sub" id="num-sub" style="top:880px; padding:0 120px">for a new engineer to reach<br />full productivity, on average</div>
+  <div class="abs center" id="num-src" style="top:1060px; font-size:28px; color:var(--muted)">Linux Foundation, State of Tech Talent 2024</div>
+
+  <!-- 2 · the senior's inbox -->
+  <div class="abs center h2" id="inbox-title" style="top:300px">Meanwhile, your seniors…</div>
+  <div class="abs card" id="inbox" style="left:80px; right:80px; top:450px; padding:12px 40px">
+    <div class="msg" id="m1"><div class="av">N</div><div><div class="who">New joiner</div><div class="txt">where is auth handled?</div></div></div>
+    <div class="msg" id="m2"><div class="av">N</div><div><div class="who">New joiner</div><div class="txt">how do I run the tests?</div></div></div>
+    <div class="msg" id="m3"><div class="av">N</div><div><div class="who">New joiner</div><div class="txt">what calls create_user?</div></div></div>
+    <div class="msg" id="m4" style="border:0"><div class="av">N</div><div><div class="who">Next new joiner</div><div class="txt">where is auth handled?<span class="again">asked again</span></div></div></div>
+  </div>
+
+  <!-- 3 · sherpa answers -->
+  <div class="abs center h2" id="ans-title" style="top:300px">Sherpa answers instead.</div>
+  <div class="abs card" id="ans" style="left:80px; right:80px; top:450px; padding:40px">
+    <div style="display:flex; gap:22px">
+      <img class="pixel" src="assets/head.svg" alt="" style="width:84px; height:70px; flex:none; background:var(--cream); border-radius:18px; padding:6px" />
+      <div style="font-size:38px; line-height:1.45">Auth lives in <b class="mono" style="font-size:33px">security.py</b>: passwords are hashed with bcrypt, and every protected route checks the token in <b class="mono" style="font-size:33px">deps.py</b>.</div>
+    </div>
+    <div style="margin:30px 0 0 106px; display:flex; flex-wrap:wrap; gap:18px 28px; align-items:center">
+      <span class="verified"><svg width="28" height="28" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#1f7a4d" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>Verified · 3 sources</span>
+      <span class="chip">security.py:12–30</span><span class="chip">deps.py:20–41</span>
+    </div>
+  </div>
+  <img class="abs pixel" id="m-guide" src="assets/guide.svg" alt="" style="left:620px; top:900px; width:360px; height:360px" />
+
+  <!-- 4 · guided tour -->
+  <div class="abs center h2" id="tour-title" style="top:300px">Then a guided tour.</div>
+  <div class="abs center eyebrow" id="tour-sub" style="top:420px">User signup · 4 stops, in the order it runs</div>
+  <div class="abs" id="tour" style="left:140px; right:80px; top:540px; height:640px">
+    <div class="abs" style="left:36px; top:40px; width:4px; height:540px; background:#e3dcd0"></div>
+    <div class="abs" id="tour-fill" style="left:36px; top:40px; width:4px; height:0; background:var(--blue)"></div>
+    <div class="stop" id="s1" style="top:0"><div class="dot">1</div><div><div class="l">Frontend</div><div class="t">Signup form</div></div></div>
+    <div class="stop" id="s2" style="top:180px"><div class="dot">2</div><div><div class="l">API</div><div class="t">POST /users/signup</div></div></div>
+    <div class="stop" id="s3" style="top:360px"><div class="dot">3</div><div><div class="l">Logic</div><div class="t">create_user()</div></div></div>
+    <div class="stop" id="s4" style="top:540px"><div class="dot">4</div><div><div class="l">Data</div><div class="t">User table</div></div></div>
+  </div>
+
+  <!-- 5 · first task -->
+  <div class="abs center h2" id="task-title" style="top:300px">And a real first task.</div>
+  <div class="abs card" id="task" style="left:80px; right:80px; top:470px; padding:44px">
+    <div class="eyebrow">Starter task · good first PR</div>
+    <div style="font-size:52px; font-weight:700; margin:18px 0 30px; line-height:1.15">Reject sign-ups from disposable email domains</div>
+    <div class="row"><span>models.py</span><span style="color:var(--muted)">validate email</span></div>
+    <div class="row"><span>crud.py</span><span style="color:var(--muted)">use the check</span></div>
+    <div class="row"><span>test_users.py</span><span style="color:var(--muted)">add a test</span></div>
+  </div>
+  <img class="abs pixel" id="m-success" src="assets/success.svg" alt="" style="left:360px; top:1080px; width:360px; height:360px" />
+
+  <!-- 6 · end card -->
+  <div class="abs end" id="end">
+    <img class="abs pixel" src="assets/happy.svg" alt="" id="end-m" style="left:370px; top:400px; width:340px; height:340px" />
+    <div class="abs center" id="end-name" style="top:780px; font-size:130px; font-weight:700; letter-spacing:-0.03em">Sherpa <span style="color:var(--sky)">AI</span></div>
+    <div class="abs center" id="end-tag" style="top:950px; font-size:56px; font-weight:600; padding:0 100px; line-height:1.2">Give your seniors their<br />afternoons back.</div>
+    <div class="abs center" id="end-line" style="top:1130px; font-size:40px; color:var(--sky)">Your codebase, explained.</div>
+  </div>
+
+  <div class="abs" id="caption"></div>
+</div>
+
+<script src="engine.js"></script>
+<script>
+  const SCRIPT = [
+    { a: 0.2, b: 4.9, text: "A new engineer takes almost five months to get fully productive." },
+    { a: 5.1, b: 10.4, text: "And your seniors spend those months answering the same questions." },
+    { a: 10.6, b: 16.4, text: "Sherpa answers them instead, from your own code, with every claim checked." },
+    { a: 16.6, b: 22.0, text: "Guided tours walk each joiner through a feature, in the order it runs." },
+    { a: 22.2, b: 26.2, text: "Then hand them a real first task." },
+    { a: 26.4, b: 30, text: "Sherpa AI. Give your seniors their afternoons back." },
+  ];
+  window.SCRIPT = SCRIPT;
+
+  function render(t) {
+    // 1 · 4.8 months
+    const n = 4.8 * easeOut(p(t, 0.3, 2.2));
+    $("#num").textContent = n.toFixed(1);
+    rise("#num", t, 0.1, 5, { dy: 30 });
+    rise("#num-unit", t, 0.4, 5);
+    rise("#num-sub", t, 1.2, 5);
+    rise("#num-src", t, 1.8, 5, { dy: 10 });
+
+    // 2 · the same questions, again
+    rise("#inbox-title", t, 5.0, 10.5);
+    $("#inbox").style.opacity = vis(t, 5.2, 10.5);
+    ["#m1", "#m2", "#m3", "#m4"].forEach((s, i) => rise(s, t, 5.5 + i * 0.95, 10.5, { dy: 30 }));
+
+    // 3 · sherpa answers
+    rise("#ans-title", t, 10.5, 16.5);
+    rise("#ans", t, 10.8, 16.5, { dy: 60 });
+    rise("#m-guide", t, 11.6, 16.5, { dy: 80 });
+    $("#m-guide").style.transform += ` translateY(${Math.sin(t * 3) * 8}px)`;
+
+    // 4 · tour: stops light up in order
+    rise("#tour-title", t, 16.5, 22);
+    rise("#tour-sub", t, 16.7, 22, { dy: 10 });
+    $("#tour").style.opacity = vis(t, 16.8, 22);
+    const k = easeInOut(p(t, 17.4, 20.6));
+    $("#tour-fill").style.height = 540 * k + "px";
+    ["#s1", "#s2", "#s3", "#s4"].forEach((s, i) => {
+      $(s).classList.toggle("on", k >= i / 3 - 0.001 && t > 17.3);
+      $(s).style.opacity = 0.35 + 0.65 * p(t, 17.0 + i * 1.07, 17.4 + i * 1.07);
+    });
+
+    // 5 · first task
+    rise("#task-title", t, 22.0, 26.4);
+    rise("#task", t, 22.2, 26.4, { dy: 60 });
+    rise("#m-success", t, 23.0, 26.4, { dy: 80, scale: 0.85 });
+
+    // 6 · end card
+    const w = easeInOut(p(t, 26.3, 26.9));
+    $("#end").style.transform = `translateY(${(1 - w) * 1920}px)`;
+    rise("#end-m", t, 26.8, 31, { dy: 40, scale: 0.8 });
+    rise("#end-name", t, 27.0, 31);
+    rise("#end-tag", t, 27.4, 31);
+    rise("#end-line", t, 27.9, 31);
+    $("#brand").style.opacity = 1 - w;
+
+    captions(t, SCRIPT);
+    if (t > 26.3) $("#caption").style.opacity = 0; // the end card says it on screen
+  }
+  boot(render, 30);
+</script>
+</body>
+</html>

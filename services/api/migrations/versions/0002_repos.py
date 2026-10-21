@@ -68,19 +68,9 @@ def upgrade() -> None:
         sa.Column("kind", sa.String(16), primary_key=True),
         sa.Column("count", sa.Integer, nullable=False, server_default="0"))
 
-    if op.get_bind().dialect.name == "postgresql":
-        # Content-addressed: identical chunk text is embedded once, whoever indexes it.
-        # Search scans one repo's rows exactly (filtered by repo_id), so no ANN index is
-        # needed at this scale; add HNSW here if repos grow past ~50k chunks.
-        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-        op.execute(f"""
-            CREATE TABLE chunk_embeddings (
-                model     varchar(120) NOT NULL,
-                text_hash varchar(40)  NOT NULL,
-                embedding vector({EMBEDDING_DIM}) NOT NULL,
-                created_at timestamptz NOT NULL DEFAULT now(),
-                PRIMARY KEY (model, text_hash)
-            )""")
+    # pgvector table (Postgres only); skipped with a warning if the extension can't be enabled
+    from app.db import ensure_vector_table
+    ensure_vector_table(op.get_bind(), EMBEDDING_DIM)
 
 
 def downgrade() -> None:

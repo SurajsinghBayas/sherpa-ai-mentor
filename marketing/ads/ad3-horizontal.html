@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sherpa AI · Day one to first PR (30s, 16:9)</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  .stage { width: 1920px; height: 1080px; }
+  .brand { left: 96px; top: 64px; }
+  #caption { left: 240px; right: 240px; bottom: 54px; font-size: 32px; padding: 16px 28px; border-radius: 18px; }
+
+  /* left: the copy for each scene */
+  .copy { left: 120px; top: 330px; width: 720px; }
+  .copy .step { font-family: "Geist Mono", monospace; font-size: 26px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--blue); }
+  .copy .h { font-size: 84px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.04; margin-top: 18px; }
+  .copy .s { font-size: 36px; color: var(--muted); line-height: 1.35; margin-top: 26px; }
+
+  .files .f { position: absolute; padding: 12px 22px; border-radius: 14px; background: var(--card); border: 2px solid var(--border); font-size: 28px; color: var(--muted); white-space: nowrap; }
+  .box { position: absolute; width: 360px; height: 150px; padding: 26px 30px; }
+  .box .t { font-size: 40px; font-weight: 700; }
+  .box .s { font-family: "Geist Mono", monospace; font-size: 24px; color: var(--muted); margin-top: 8px; }
+  .box.main { border-color: var(--blue); background: #eef5fe; }
+  .bubble-user { background: var(--navy); color: var(--cream); font-size: 34px; padding: 20px 30px; border-radius: 26px 26px 8px 26px; }
+  .code { font-size: 25px; }
+  .code .ln .n { width: 80px; }
+  .verified { display: inline-flex; align-items: center; gap: 10px; font-size: 25px; font-weight: 600; color: #1f7a4d; background: #e7f4ec; border-radius: 999px; padding: 8px 18px; }
+  .stop { position: absolute; display: flex; align-items: center; gap: 26px; }
+  .stop .dot { width: 64px; height: 64px; border-radius: 50%; border: 4px solid #cfc6b8; background: var(--paper); display: grid; place-items: center; font-size: 28px; font-weight: 700; color: var(--muted); flex: none; }
+  .stop.on .dot { border-color: var(--blue); background: var(--blue); color: #fff; }
+  .stop .t { font-size: 36px; font-weight: 600; }
+  .stop .l { font-family: "Geist Mono", monospace; font-size: 22px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
+  .wave i { display: inline-block; width: 12px; margin: 0 5px; border-radius: 6px; background: var(--blue); vertical-align: middle; }
+  .row { display: flex; justify-content: space-between; font-family: "Geist Mono", monospace; font-size: 27px; padding: 14px 0; border-top: 2px solid #efe9df; }
+  .end { inset: 0; background: var(--navy); color: var(--cream); }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="abs brand" id="brand"><img class="pixel" src="assets/head.svg" alt="" />Sherpa <b>AI</b></div>
+
+  <!-- left column: one block of copy per scene -->
+  <div class="abs copy" id="c1"><div class="step">Day one</div><div class="h">219 files.<br />No map.</div><div class="s">A codebase you've never seen, and nobody has time to explain it.</div></div>
+  <div class="abs copy" id="c2"><div class="step">01 · Understand</div><div class="h">See how it all fits.</div><div class="s">An architecture map built from the real import graph.</div></div>
+  <div class="abs copy" id="c3"><div class="step">02 · Ask</div><div class="h">Get the exact lines.</div><div class="s">Every answer cites the file and line, and is checked against the code.</div></div>
+  <div class="abs copy" id="c4"><div class="step">03 · Listen</div><div class="h">Hear it explained.</div><div class="s">Narrated tours that open the code as Sherpa talks. Interrupt any time.</div></div>
+  <div class="abs copy" id="c5"><div class="step">04 · Ship</div><div class="h">Your first PR.</div><div class="s">A real starter task, with the files to touch.</div></div>
+
+  <!-- 1 · files -->
+  <div class="abs files" id="files" style="inset:0"></div>
+
+  <!-- 2 · map -->
+  <svg class="abs" id="map-lines" style="left:0; top:0" width="1920" height="1080">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9aa3b5" /></marker></defs>
+    <path id="e1" d="M1340 345 H1412" stroke="#9aa3b5" stroke-width="5" fill="none" marker-end="url(#arr)" />
+    <path id="e2" d="M1600 420 V572" stroke="#9aa3b5" stroke-width="5" fill="none" marker-end="url(#arr)" />
+    <path id="e3" d="M1420 655 H1348" stroke="#9aa3b5" stroke-width="5" fill="none" marker-end="url(#arr)" />
+  </svg>
+  <div class="abs card box" id="b1" style="left:980px; top:270px"><div class="t">Frontend</div><div class="s">React · 64 files</div></div>
+  <div class="abs card box main" id="b2" style="left:1420px; top:270px"><div class="t">API</div><div class="s">FastAPI routes</div></div>
+  <div class="abs card box" id="b3" style="left:1420px; top:580px"><div class="t">Services</div><div class="s">crud · security</div></div>
+  <div class="abs card box" id="b4" style="left:980px; top:580px"><div class="t">Database</div><div class="s">Postgres · models</div></div>
+
+  <!-- 3 · ask -->
+  <div class="abs" id="ask" style="left:960px; width:840px; top:150px">
+    <div style="display:flex; justify-content:flex-end"><div class="bubble-user" id="q"></div></div>
+    <div id="a" style="display:flex; gap:20px; margin-top:26px">
+      <img class="pixel" src="assets/head.svg" alt="" style="width:72px; height:60px; flex:none; background:var(--cream); border-radius:16px; padding:5px" />
+      <div style="font-size:32px; line-height:1.45">Login is handled by the <b class="mono" style="font-size:29px">/login</b> route: it checks the password and returns a token. <span class="chip" style="font-size:25px">login.py:37–41</span></div>
+    </div>
+  </div>
+  <div class="abs code" id="code" style="left:960px; width:840px; top:450px; padding:20px 0">
+    <div class="ln"><span class="n">35</span><span><span class="f">@router.post</span>(<span class="s">"/login/access-token"</span>)</span></div>
+    <div class="ln"><span class="n">36</span><span><span class="k">def</span> <span class="f">login</span>(session, form):</span></div>
+    <div class="ln hit"><span class="n">37</span><span>    user = crud.<span class="f">authenticate</span>(</span></div>
+    <div class="ln hit"><span class="n">38</span><span>        form.username, form.password)</span></div>
+    <div class="ln hit"><span class="n">39</span><span>    <span class="k">if not</span> user:</span></div>
+    <div class="ln hit"><span class="n">40</span><span>        <span class="k">raise</span> <span class="f">HTTPException</span>(<span class="d">400</span>, <span class="s">"Bad login"</span>)</span></div>
+    <div class="ln hit"><span class="n">41</span><span>    <span class="k">return</span> <span class="f">Token</span>(<span class="f">create_token</span>(user.id))</span></div>
+  </div>
+  <div class="abs" id="verified" style="left:960px; top:818px"><span class="verified"><svg width="26" height="26" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#1f7a4d" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>Every line checked against the code</span></div>
+
+  <!-- 4 · listen -->
+  <div class="abs" id="tour" style="left:980px; top:190px; width:420px; height:620px">
+    <div class="abs" style="left:30px; top:34px; width:4px; height:480px; background:#e3dcd0"></div>
+    <div class="abs" id="tour-fill" style="left:30px; top:34px; width:4px; height:0; background:var(--blue)"></div>
+    <div class="stop" id="s1" style="top:0"><div class="dot">1</div><div><div class="l">Frontend</div><div class="t">Login form</div></div></div>
+    <div class="stop" id="s2" style="top:160px"><div class="dot">2</div><div><div class="l">API</div><div class="t">POST /login</div></div></div>
+    <div class="stop" id="s3" style="top:320px"><div class="dot">3</div><div><div class="l">Logic</div><div class="t">authenticate()</div></div></div>
+    <div class="stop" id="s4" style="top:480px"><div class="dot">4</div><div><div class="l">Data</div><div class="t">User table</div></div></div>
+  </div>
+  <img class="abs pixel" id="m-explain" src="assets/explaining.svg" alt="" style="left:1460px; top:220px; width:320px; height:320px" />
+  <div class="abs wave" id="wave" style="left:1420px; width:420px; top:600px; height:130px; line-height:130px; text-align:center"></div>
+
+  <!-- 5 · first task -->
+  <div class="abs card" id="task" style="left:960px; width:840px; top:210px; padding:40px">
+    <div class="eyebrow" style="font-size:24px">Starter task · good first PR</div>
+    <div style="font-size:44px; font-weight:700; margin:16px 0 26px; line-height:1.15">Reject sign-ups from disposable email domains</div>
+    <div class="row"><span>models.py</span><span style="color:var(--muted)">validate email</span></div>
+    <div class="row"><span>crud.py</span><span style="color:var(--muted)">use the check</span></div>
+    <div class="row"><span>test_users.py</span><span style="color:var(--muted)">add a test</span></div>
+  </div>
+  <img class="abs pixel" id="m-success" src="assets/success.svg" alt="" style="left:1560px; top:690px; width:240px; height:240px" />
+
+  <!-- 6 · end card -->
+  <div class="abs end" id="end">
+    <img class="abs pixel" src="assets/happy.svg" alt="" id="end-m" style="left:820px; top:150px; width:280px; height:280px" />
+    <div class="abs center" id="end-name" style="top:450px; font-size:130px; font-weight:700; letter-spacing:-0.03em">Sherpa <span style="color:var(--sky)">AI</span></div>
+    <div class="abs center" id="end-tag" style="top:630px; font-size:56px; font-weight:500">Your codebase, explained.</div>
+    <div class="abs center" id="end-line" style="top:730px; font-size:36px; color:var(--sky)">From day one to your first pull request.</div>
+  </div>
+
+  <div class="abs" id="caption"></div>
+</div>
+
+<script src="engine.js"></script>
+<script>
+  const FILES = ["auth.py", "deps.ts", "crud.py", "main.py", "routes/", "models.py", "utils.ts", "client.ts", "config.py",
+    "login.tsx", "items.py", "db.py", "security.py", "users.py", "tests/", "Dockerfile", "alembic/", "api.ts"];
+  const SPOT = [[990,220,-6],[1420,190,5],[1180,300,3],[1560,330,-4],[1010,420,4],[1300,460,-3],[1600,500,6],[1080,560,-5],[1420,610,2],
+    [980,700,5],[1240,720,-6],[1560,700,3],[1640,250,7],[1250,180,-2],[1100,800,-7],[1420,820,4],[1700,620,-5],[1350,380,2]];
+  const files = $("#files");
+  FILES.forEach((f, i) => {
+    const d = document.createElement("div");
+    d.className = "f mono";
+    d.textContent = f;
+    d.style.left = SPOT[i][0] + "px";
+    d.style.top = SPOT[i][1] + "px";
+    files.appendChild(d);
+  });
+  const wave = $("#wave");
+  for (let i = 0; i < 18; i++) wave.appendChild(document.createElement("i"));
+
+  const SCRIPT = [
+    { a: 0.2, b: 4.4, text: "Day one at a new job, and a codebase you've never seen." },
+    { a: 4.6, b: 9.9, text: "Sherpa maps how the whole system fits together, straight from the code." },
+    { a: 10.1, b: 16.4, text: "Ask anything. Every answer points to the exact file and line, checked against the code." },
+    { a: 16.6, b: 22.0, text: "Take a guided tour, explained out loud, and interrupt whenever you have a question." },
+    { a: 22.2, b: 25.9, text: "Then pick up a real first task." },
+    { a: 26.0, b: 30, text: "Sherpa AI. Your codebase, explained." },
+  ];
+  window.SCRIPT = SCRIPT;
+
+  function render(t) {
+    // copy on the left, one block per scene
+    [["#c1", 0, 4.5], ["#c2", 4.5, 10], ["#c3", 10, 16.5], ["#c4", 16.5, 22], ["#c5", 22, 26.4]].forEach(([s, a, b]) =>
+      rise(s, t, a + 0.1, b, { dy: 30 }));
+
+    // 1 · files pile up, then clear
+    $$("#files .f").forEach((el, i) => {
+      const a = 0.4 + i * 0.08, k = easeOut(p(t, a, a + 0.4)), out = easeInOut(p(t, 4.0, 4.6));
+      el.style.opacity = k * (1 - out);
+      el.style.transform = `translateY(${(1 - k) * -50 + out * 60}px) rotate(${SPOT[i][2]}deg)`;
+    });
+
+    // 2 · map
+    ["#b1", "#b2", "#b3", "#b4"].forEach((s, i) => rise(s, t, 4.8 + i * 0.6, 10, { dy: 24, scale: 0.92 }));
+    ["#e1", "#e2", "#e3"].forEach((s, i) => {
+      const el = $(s), len = el.getTotalLength(), a = 5.4 + i * 0.6;
+      el.style.strokeDasharray = len;
+      el.style.strokeDashoffset = len * (1 - easeInOut(p(t, a, a + 0.5)));
+      el.style.opacity = vis(t, a, 10);
+    });
+
+    // 3 · ask
+    $("#ask").style.opacity = vis(t, 10.2, 16.5);
+    $("#q").textContent = typed("Where is login handled?", t, 10.4, 11.5) || "​";
+    rise("#a", t, 11.8, 16.5, { dy: 20 });
+    rise("#code", t, 12.6, 16.5, { dy: 80 });
+    rise("#verified", t, 14.0, 16.5, { dy: 16 });
+
+    // 4 · narrated tour
+    $("#tour").style.opacity = vis(t, 16.6, 22);
+    const k = easeInOut(p(t, 17.2, 20.8));
+    $("#tour-fill").style.height = 480 * k + "px";
+    ["#s1", "#s2", "#s3", "#s4"].forEach((s, i) => {
+      $(s).classList.toggle("on", k >= i / 3 - 0.001 && t > 17.1);
+      $(s).style.opacity = 0.35 + 0.65 * p(t, 16.9 + i * 1.2, 17.3 + i * 1.2);
+    });
+    $("#m-explain").style.opacity = vis(t, 16.8, 22);
+    $("#m-explain").style.transform = `translateY(${Math.sin(t * 4) * 8}px)`;
+    $("#wave").style.opacity = vis(t, 17.2, 22);
+    $$("#wave i").forEach((el, i) => (el.style.height = 20 + Math.abs(Math.sin(t * 7 + i * 0.7) * Math.cos(t * 3.1 + i * 0.33)) * 110 + "px"));
+
+    // 5 · first task
+    rise("#task", t, 22.2, 26.4, { dy: 50 });
+    rise("#m-success", t, 22.9, 26.4, { dy: 60, scale: 0.85 });
+
+    // 6 · end card
+    const w = easeInOut(p(t, 26.3, 26.9));
+    $("#end").style.transform = `translateY(${(1 - w) * 1080}px)`;
+    rise("#end-m", t, 26.8, 31, { dy: 30, scale: 0.8 });
+    rise("#end-name", t, 27.0, 31);
+    rise("#end-tag", t, 27.4, 31);
+    rise("#end-line", t, 27.8, 31);
+    $("#brand").style.opacity = 1 - w;
+
+    captions(t, SCRIPT);
+    if (t > 25.95) $("#caption").style.opacity = 0; // the end card says it on screen
+  }
+  boot(render, 30);
+</script>
+</body>
+</html>

@@ -17,11 +17,13 @@ const SOURCES = [
 rmSync(work, { recursive: true, force: true });
 mkdirSync(work);
 for (const f of SOURCES) if (existsSync(join(web, f))) cpSync(join(web, f), join(work, f), { recursive: true });
-symlinkSync(join(web, "node_modules"), join(work, "node_modules"), "dir");
+// a junction on Windows: directory symlinks there need admin rights or Developer Mode
+symlinkSync(join(web, "node_modules"), join(work, "node_modules"), process.platform === "win32" ? "junction" : "dir");
 
 const api = process.env.SHERPA_API_URL || "http://localhost:8000";
 console.log(`Building the desktop export against ${api}`);
-const r = spawnSync(join(web, "node_modules", ".bin", "next"), ["build"], {
+// next's JS entry run by this same node: .bin/next is a .cmd shim on Windows, which spawn can't run
+const r = spawnSync(process.execPath, [join(web, "node_modules", "next", "dist", "bin", "next"), "build"], {
   cwd: work,
   stdio: "inherit",
   env: { ...process.env, SHERPA_DESKTOP: "1", NEXT_PUBLIC_API_URL: api },

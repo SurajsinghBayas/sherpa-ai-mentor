@@ -1,12 +1,16 @@
 """Pydantic schemas — the API contract shared with the web app."""
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 
 class IngestRequest(BaseModel):
     repo_url: Optional[str] = None
     local_path: Optional[str] = None
     branch: str = ""  # blank = the repo's default branch
+    # private mode: code stays in server memory only (never the DB) and expires
+    private: bool = False
+    # read-only access token for a private repo; used for this one clone, never stored or logged
+    token: Optional[SecretStr] = None
 
 
 class IngestResponse(BaseModel):

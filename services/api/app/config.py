@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     daily_llm_requests: int = 300
     daily_ingests: int = 30
     max_repos_per_user: int = 15
+    # private mode: code kept in server memory only, wiped after this long
+    private_ttl_hours: float = 8
+    max_private_repos: int = 20  # per server, all users (each holds its code + vectors in RAM)
 
     # development | production — production refuses to start with unsafe settings
     environment: str = "development"

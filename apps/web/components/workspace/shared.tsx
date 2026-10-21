@@ -106,6 +106,16 @@ export function CodeBlock({ code, start, file }: { code: string; start: number; 
   return <SourceLines code={code} lang={langFor(file)} start={start} className="max-h-[28rem] text-[12px]" />;
 }
 
+/** "7 h 32 min left" until an epoch-seconds deadline (a private repo's expiry). */
+export function timeLeft(ts: number | null | undefined): string {
+  if (!ts) return "";
+  const m = Math.max(0, Math.round((ts - Date.now() / 1000) / 60));
+  if (m < 1) return "ending now";
+  if (m < 60) return `${m} min left`;
+  const h = Math.floor(m / 60);
+  return `${h} h${m % 60 ? ` ${m % 60} min` : ""} left`;
+}
+
 export function timeAgo(ts: number | null | undefined): string {
   if (!ts) return "";
   const s = Math.max(1, Math.round(Date.now() / 1000 - ts));

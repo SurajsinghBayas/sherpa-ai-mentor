@@ -134,7 +134,7 @@ def test_git_check_compares_commits_without_cloning(client, monkeypatch):
         return dict(files), {"source": url, "name": "o/r", "branch": "", "commit": head["sha"],
                              "kind": "git", "indexed_at": 1.0, "roles": {}, "languages": [".py"]}
 
-    def fake_ingest(url, local, branch=""):
+    def fake_ingest(url, local, branch="", token=""):
         sources, meta = fake_fetch(url, local, branch)
         return "x", m.chunk_sources(sources), meta, sources
 

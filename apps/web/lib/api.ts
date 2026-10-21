@@ -63,6 +63,8 @@ export type Mode = "llm" | "offline";
 export type Repo = {
   repo_id: string; name: string; source: string; kind: string; commit: string;
   indexed_at: number | null; files: number; chunks: number; languages: string[]; has_docs: boolean;
+  /** private mode: code held in server memory only, wiped at expires_at (epoch seconds) */
+  private?: boolean; expires_at?: number | null;
 };
 export type Changes = { added?: string[]; modified?: string[]; removed?: string[] };
 
@@ -183,6 +185,7 @@ export type Health = {
   ok: boolean; db: string; local_ingest: boolean;
   llm: { provider: string; model: string; fallbacks: string[]; available: boolean };
   embeddings: { model: string; available: boolean };
+  private_ttl_hours?: number;
 };
 
 export const api = {
@@ -202,7 +205,7 @@ export const api = {
 
   repos: () => req<{ repos: Repo[] }>("/api/repos"),
   deleteRepo: (repo_id: string) => req(`/api/repos/${repo_id}`, { method: "DELETE" }),
-  ingest: (source: { repo_url?: string; local_path?: string }) =>
+  ingest: (source: { repo_url?: string; local_path?: string; private?: boolean; token?: string }) =>
     req<Repo & { changes: Changes }>("/api/ingest", post(source)),
   sync: (repo_id: string) => req<SyncResult>("/api/sync", post({ repo_id, refresh_docs: true })),
   /** Manual "Reindex": rebuild the whole index from the source (docs are left to the Docs tab). */

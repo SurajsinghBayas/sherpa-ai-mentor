@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sherpa AI · Day one (30s)</title>
+<link rel="stylesheet" href="base.css" />
+<style>
+  .files .f { position: absolute; padding: 14px 24px; border-radius: 16px; background: var(--card); border: 2px solid var(--border); font-size: 32px; color: var(--muted); white-space: nowrap; }
+  .box { position: absolute; width: 400px; height: 170px; padding: 30px 34px; }
+  .box .t { font-size: 44px; font-weight: 700; }
+  .box .s { font-family: "Geist Mono", monospace; font-size: 26px; color: var(--muted); margin-top: 10px; }
+  .box.main { border-color: var(--blue); background: #eef5fe; }
+  .bubble-user { background: var(--navy); color: var(--cream); font-size: 40px; padding: 26px 34px; border-radius: 30px 30px 8px 30px; }
+  .answer { font-size: 38px; line-height: 1.45; }
+  .verified { display: inline-flex; align-items: center; gap: 12px; font-size: 28px; font-weight: 600; color: #1f7a4d; background: #e7f4ec; border-radius: 999px; padding: 10px 22px; }
+  .wave i { display: inline-block; width: 16px; margin: 0 7px; border-radius: 8px; background: var(--blue); vertical-align: middle; }
+  .end { inset: 0; background: var(--navy); color: var(--cream); }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="abs brand" id="brand"><img class="pixel" src="assets/head.svg" alt="" />Sherpa <b>AI</b></div>
+
+  <!-- 1 · day one: a pile of files -->
+  <div class="abs center h1" id="day" style="top:330px">Day 1.</div>
+  <div class="abs files" id="files" style="inset:0"></div>
+  <div class="abs center h2" id="where" style="top:1180px">219 files.<br /><span style="color:var(--muted)">Where do you start?</span></div>
+
+  <!-- 2 · meet sherpa -->
+  <img class="abs pixel" id="m-happy" src="assets/happy.svg" alt="" style="left:310px; top:430px; width:460px; height:460px" />
+  <div class="abs center h1" id="meet" style="top:930px">Meet Sherpa.</div>
+  <div class="abs center sub" id="meet-sub" style="top:1070px">Your guide to any codebase.</div>
+
+  <!-- 3 · the map -->
+  <div class="abs center h2" id="map-title" style="top:330px">See how it all fits.</div>
+  <svg class="abs" id="map-lines" style="left:0; top:0" width="1080" height="1920">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9aa3b5" /></marker></defs>
+    <path id="e1" d="M500 660 H580" stroke="#9aa3b5" stroke-width="5" fill="none" marker-end="url(#arr)" />
+    <path id="e2" d="M780 745 V880" stroke="#9aa3b5" stroke-width="5" fill="none" marker-end="url(#arr)" />
+    <path id="e3" d="M580 965 H500" stroke="#9aa3b5" stroke-width="5" fill="none" marker-end="url(#arr)" />
+  </svg>
+  <div class="abs card box" id="b1" style="left:80px; top:575px"><div class="t">Frontend</div><div class="s">React · 64 files</div></div>
+  <div class="abs card box main" id="b2" style="left:580px; top:575px"><div class="t">API</div><div class="s">FastAPI routes</div></div>
+  <div class="abs card box" id="b3" style="left:580px; top:880px"><div class="t">Services</div><div class="s">crud · security</div></div>
+  <div class="abs card box" id="b4" style="left:80px; top:880px"><div class="t">Database</div><div class="s">Postgres · models</div></div>
+  <div class="abs center sub" id="map-sub" style="top:1130px">Built from the real import graph.</div>
+
+  <!-- 4 · ask anything -->
+  <div class="abs center h2" id="ask-title" style="top:300px">Ask anything.</div>
+  <div class="abs" id="ask" style="left:80px; right:80px; top:430px">
+    <div style="display:flex; justify-content:flex-end"><div class="bubble-user" id="q"></div></div>
+    <div id="a" style="display:flex; gap:22px; margin-top:34px">
+      <img class="pixel" src="assets/head.svg" alt="" style="width:84px; height:70px; flex:none; background:var(--cream); border-radius:18px; padding:6px" />
+      <div class="answer">Login is handled by the <b class="mono" style="font-size:34px">/login</b> route. It checks the password and returns a token. <span class="chip">login.py:37–41</span></div>
+    </div>
+  </div>
+  <div class="abs code" id="code" style="left:80px; right:80px; top:900px; padding:26px 0">
+    <div class="ln"><span class="n">35</span><span><span class="f">@router.post</span>(<span class="s">"/login/access-token"</span>)</span></div>
+    <div class="ln"><span class="n">36</span><span><span class="k">def</span> <span class="f">login</span>(session, form):</span></div>
+    <div class="ln hit"><span class="n">37</span><span>    user = crud.<span class="f">authenticate</span>(</span></div>
+    <div class="ln hit"><span class="n">38</span><span>        form.username, form.password)</span></div>
+    <div class="ln hit"><span class="n">39</span><span>    <span class="k">if not</span> user:</span></div>
+    <div class="ln hit"><span class="n">40</span><span>        <span class="k">raise</span> <span class="f">HTTPException</span>(<span class="d">400</span>, <span class="s">"Bad login"</span>)</span></div>
+    <div class="ln hit"><span class="n">41</span><span>    <span class="k">return</span> <span class="f">Token</span>(<span class="f">create_token</span>(user.id))</span></div>
+  </div>
+  <div class="abs center" id="verified" style="top:1330px"><span class="verified"><svg width="30" height="30" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#1f7a4d" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>Every line checked against the code</span></div>
+
+  <!-- 5 · out loud -->
+  <div class="abs center h2" id="loud-title" style="top:330px">Or just ask out loud.</div>
+  <img class="abs pixel" id="m-explain" src="assets/explaining.svg" alt="" style="left:330px; top:470px; width:420px; height:420px" />
+  <div class="abs center wave" id="wave" style="top:960px; height:160px; line-height:160px"></div>
+  <div class="abs center sub" id="loud-sub" style="top:1150px">Narrated tours. Talk, interrupt, follow up.</div>
+
+  <!-- 6 · end card -->
+  <div class="abs end" id="end">
+    <img class="abs pixel" src="assets/happy.svg" alt="" id="end-m" style="left:370px; top:420px; width:340px; height:340px" />
+    <div class="abs center" id="end-name" style="top:800px; font-size:130px; font-weight:700; letter-spacing:-0.03em">Sherpa <span style="color:var(--sky)">AI</span></div>
+    <div class="abs center" id="end-tag" style="top:970px; font-size:58px; font-weight:500">Your codebase, explained.</div>
+    <div class="abs center" id="end-line" style="top:1070px; font-size:40px; color:var(--sky)">Every answer cited to the line.</div>
+  </div>
+
+  <div class="abs" id="caption"></div>
+</div>
+
+<script src="engine.js"></script>
+<script>
+  const FILES = ["auth.py", "deps.ts", "crud.py", "main.py", "routes/", "models.py", "utils.ts", "client.ts", "config.py",
+    "login.tsx", "items.py", "db.py", "security.py", "users.py", "tests/", "Dockerfile", "alembic/", "api.ts", "hooks/", "schemas.py"];
+  // fixed scatter (no randomness: every render is identical)
+  const SPOT = [[90,560,-6],[600,520,5],[330,640,3],[720,700,-4],[120,760,4],[450,800,-3],[760,860,6],[220,900,-5],[560,960,2],
+    [90,1020,5],[380,1060,-6],[700,1060,3],[150,640,7],[820,600,-2],[480,560,-7],[300,1000,4],[620,780,-5],[60,880,2],[880,960,-6],[420,920,6]];
+  const files = $("#files");
+  FILES.forEach((f, i) => {
+    const d = document.createElement("div");
+    d.className = "f mono";
+    d.textContent = f;
+    d.style.left = SPOT[i][0] + "px";
+    d.style.top = SPOT[i][1] + "px";
+    files.appendChild(d);
+  });
+  const wave = $("#wave");
+  for (let i = 0; i < 26; i++) wave.appendChild(document.createElement("i"));
+
+  const SCRIPT = [
+    { a: 0.2, b: 4.4, text: "Day one. Two hundred files. Where do you even start?" },
+    { a: 4.6, b: 8.9, text: "Meet Sherpa, your guide to any codebase." },
+    { a: 9.1, b: 14.9, text: "It maps how the whole system fits together, from the real code." },
+    { a: 15.1, b: 21.4, text: "Ask anything. Every answer points to the exact file and line." },
+    { a: 21.6, b: 26.4, text: "Or just ask out loud, and Sherpa walks you through it." },
+    { a: 26.6, b: 30, text: "Sherpa AI. Your codebase, explained." },
+  ];
+  window.SCRIPT = SCRIPT;
+
+  function render(t) {
+    // 1 · day one
+    rise("#day", t, 0, 4.5, { dy: 30 });
+    $$("#files .f").forEach((el, i) => {
+      const a = 0.4 + i * 0.07;
+      const k = easeOut(p(t, a, a + 0.4));
+      const out = easeInOut(p(t, 3.9, 4.5));
+      el.style.opacity = k * (1 - out);
+      el.style.transform = `translateY(${(1 - k) * -60 + out * 80}px) rotate(${SPOT[i][2]}deg) scale(${0.8 + 0.2 * k})`;
+    });
+    rise("#where", t, 2.0, 4.5);
+
+    // 2 · meet sherpa
+    const pop = p(t, 4.6, 5.2);
+    $("#m-happy").style.opacity = vis(t, 4.6, 9);
+    $("#m-happy").style.transform = `translateY(${(1 - easeOut(pop)) * 120 - Math.sin(p(t, 5.2, 9) * Math.PI * 3) * 10}px) scale(${0.6 + 0.4 * easeOut(pop) + Math.sin(pop * Math.PI) * 0.08})`;
+    rise("#meet", t, 5.0, 9);
+    rise("#meet-sub", t, 5.4, 9);
+
+    // 3 · map
+    rise("#map-title", t, 9.0, 15);
+    ["#b1", "#b2", "#b3", "#b4"].forEach((s, i) => rise(s, t, 9.3 + i * 0.7, 15, { dy: 30, scale: 0.9 }));
+    ["#e1", "#e2", "#e3"].forEach((s, i) => {
+      const el = $(s), len = el.getTotalLength();
+      const k = easeInOut(p(t, 9.9 + i * 0.7, 10.4 + i * 0.7));
+      el.style.strokeDasharray = len;
+      el.style.strokeDashoffset = len * (1 - k);
+      el.style.opacity = vis(t, 9.9 + i * 0.7, 15);
+    });
+    rise("#map-sub", t, 12.4, 15);
+
+    // 4 · ask anything
+    rise("#ask-title", t, 15.0, 21.5);
+    $("#ask").style.opacity = vis(t, 15.2, 21.5);
+    $("#q").textContent = typed("Where is login handled?", t, 15.4, 16.6) || "​";
+    rise("#a", t, 16.9, 21.5, { dy: 20 });
+    rise("#code", t, 17.8, 21.5, { dy: 120 });
+    $$("#code .ln.hit").forEach((el, i) => (el.style.background = t > 18.6 + i * 0.12 ? "" : "transparent"));
+    rise("#verified", t, 19.4, 21.5, { dy: 20 });
+
+    // 5 · out loud
+    rise("#loud-title", t, 21.5, 26.5);
+    $("#m-explain").style.opacity = vis(t, 21.7, 26.5);
+    $("#m-explain").style.transform = `translateY(${Math.sin(t * 4) * 8}px)`;
+    $("#wave").style.opacity = vis(t, 22.0, 26.5);
+    $$("#wave i").forEach((el, i) => {
+      const h = 24 + Math.abs(Math.sin(t * 7 + i * 0.7) * Math.cos(t * 3.1 + i * 0.33)) * 130;
+      el.style.height = h + "px";
+    });
+    rise("#loud-sub", t, 22.6, 26.5);
+
+    // 6 · end card wipes up
+    const w = easeInOut(p(t, 26.4, 27.0));
+    $("#end").style.transform = `translateY(${(1 - w) * 1920}px)`;
+    rise("#end-m", t, 26.9, 31, { dy: 40, scale: 0.8 });
+    rise("#end-name", t, 27.1, 31);
+    rise("#end-tag", t, 27.5, 31);
+    rise("#end-line", t, 27.9, 31);
+    $("#brand").style.opacity = 1 - w;
+
+    captions(t, SCRIPT);
+    if (t > 26.4) $("#caption").style.opacity = 0; // the end card says it on screen
+  }
+  boot(render, 30);
+</script>
+</body>
+</html>

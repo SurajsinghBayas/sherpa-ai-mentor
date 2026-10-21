@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, FileCode2, FolderUp, Github, ShieldCheck, Terminal } from "lucide-react";
 import { Sherpa, SherpaAvatar, SherpaSays, Wordmark, type Pose } from "../components/sherpa";
 import { buttonVariants } from "../components/ui/button-variants";
+import { AdFilm } from "../components/ad-film";
 import { cn } from "../lib/utils";
 
 const STEPS: { pose: Pose; title: string; body: string }[] = [
@@ -142,6 +143,20 @@ export default function Landing() {
 
         <div className="animate-enter-up [animation-delay:80ms]">
           <ProductPreview />
+        </div>
+      </section>
+
+      {/* The film */}
+      <section className="border-t border-border">
+        <div className="container py-20">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="eyebrow">See it in action</p>
+            <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">Thirty seconds with Sherpa</h2>
+            <p className="mt-4 text-muted-foreground">
+              A new joiner, a codebase they have never seen, and Sherpa showing them around.
+            </p>
+          </div>
+          <AdFilm className="mx-auto mt-12 max-w-5xl" />
         </div>
       </section>
 

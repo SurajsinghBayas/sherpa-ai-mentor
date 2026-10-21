@@ -99,3 +99,19 @@ def test_migrations_create_schema(tmp_path, monkeypatch):
     tables = set(inspect(eng).get_table_names())
     assert {"users", "repos", "repo_chunks", "repo_files", "repo_artifacts", "usage_counters",
             "study_results", "alembic_version"} <= tables
+
+
+def test_init_db_recreates_missing_tables(tmp_path, monkeypatch):
+    """A table dropped behind Alembic's back (version still at head) comes back on startup."""
+    import app.db as dbmod
+    from sqlalchemy import create_engine, inspect
+    eng = create_engine(f"sqlite:///{tmp_path}/r.db")
+    monkeypatch.setattr(dbmod, "engine", eng)
+    dbmod.init_db()
+    with eng.begin() as conn:
+        conn.exec_driver_sql("DROP TABLE ingest_jobs")
+        conn.exec_driver_sql("DROP TABLE study_results")
+    dbmod.init_db()
+    tables = set(inspect(eng).get_table_names())
+    assert {"ingest_jobs", "study_results"} <= tables
+    assert dbmod.vectors_ready is False  # SQLite: no pgvector, search uses TF-IDF

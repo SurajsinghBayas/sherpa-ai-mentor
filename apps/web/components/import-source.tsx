@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertCircle, FileArchive, FolderOpen, Github, Loader2, RotateCcw, Terminal, Upload, X } from "lucide-react";
+import { AlertCircle, FileArchive, FolderOpen, Github, Loader2, Lock, RotateCcw, Terminal, Upload, X } from "lucide-react";
 import { api, ApiError, type UploadJob } from "../lib/api";
 import { formatBytes, planFolder, zipFolder, type FolderPlan } from "../lib/source-filter";
 import { cn } from "../lib/utils";
 import NumberFlow from "@number-flow/react";
 import { CliQuickstart } from "./cli-guide";
 import { Sherpa } from "./sherpa";
-import { Badge, Button, Input, Tabs } from "./ui/primitives";
+import { Badge, Button, Input, Tabs, Tooltip } from "./ui/primitives";
 
 type Source = "github" | "zip" | "folder" | "cli";
 type Phase =
@@ -90,17 +90,59 @@ function Progress({ value, track, label, right, spinning }: {
   );
 }
 
+/** Private mode, as one line: a small switch and what it means. */
+function PrivateToggle({
+  on,
+  onToggle,
+  ttlHours,
+  disabled,
+}: {
+  on: boolean;
+  onToggle: (on: boolean) => void;
+  ttlHours: number;
+  disabled: boolean;
+}) {
+  return (
+    <div className="mt-3 flex items-center gap-2 text-xs">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label="Private mode"
+        disabled={disabled}
+        onClick={() => onToggle(!on)}
+        className={cn(
+          "relative h-4 w-7 shrink-0 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+          on ? "bg-primary" : "bg-border"
+        )}
+      >
+        <span className={cn("absolute left-0 top-0.5 size-3 rounded-full bg-background shadow-sm transition-transform duration-150", on ? "translate-x-3.5" : "translate-x-0.5")} />
+      </button>
+      <button type="button" disabled={disabled} onClick={() => onToggle(!on)} className="flex items-center gap-1 font-medium">
+        <Lock className="size-3" /> Private
+      </button>
+      <span className="truncate text-muted-foreground">
+        {on ? `Code stays in memory only, wiped after ${ttlHours} h` : "Nothing saved, for private or sensitive code"}
+      </span>
+    </div>
+  );
+}
+
 export function ImportSource({
   localAllowed,
+  privateTtlHours = 8,
   onIndexed,
   onCancel,
 }: {
   localAllowed: boolean;
+  privateTtlHours?: number;
   onIndexed: (repoId: string) => void;
   onCancel?: () => void;
 }) {
   const [source, setSource] = useState<Source>("github");
   const [url, setUrl] = useState(onCancel ? "" : DEMO_REPO);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [token, setToken] = useState("");
   const [cloning, setCloning] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: "pick" });
   const [name, setName] = useState("");
@@ -180,14 +222,24 @@ export function ImportSource({
     setCloning(true);
     try {
       const isUrl = /^https?:\/\//.test(s);
-      const r = await api.ingest(isUrl ? { repo_url: s } : { local_path: s });
+      const t = isPrivate && isUrl ? token.trim() : "";
+      const r = await api.ingest({
+        ...(isUrl ? { repo_url: s } : { local_path: s }),
+        ...(isPrivate ? { private: true } : {}),
+        ...(t ? { token: t } : {}),
+      });
       const n = (r.changes.added?.length || 0) + (r.changes.modified?.length || 0) + (r.changes.removed?.length || 0);
-      toast.success(`Indexed ${r.name}: ${r.files} files${n ? ` · ${n} changed since last index` : ""}`);
+      toast.success(
+        r.private
+          ? `Indexed ${r.name} privately: ${r.files} files, held in memory for ${privateTtlHours} hours`
+          : `Indexed ${r.name}: ${r.files} files${n ? ` · ${n} changed since last index` : ""}`
+      );
       setUrl("");
       onIndexed(r.repo_id);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Indexing failed");
     } finally {
+      setToken(""); // used for one clone only; don't keep it around
       setCloning(false);
     }
   }
@@ -286,15 +338,42 @@ export function ImportSource({
       />
 
       {source === "github" && (
-        <div className="mt-3 flex gap-2">
+        <PrivateToggle
+          on={isPrivate}
+          onToggle={(v) => {
+            setIsPrivate(v);
+            if (!v) setToken("");
+          }}
+          ttlHours={privateTtlHours}
+          disabled={cloning}
+        />
+      )}
+      {source === "github" && (
+        <div className="mt-2 flex flex-wrap gap-2">
           <Input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder={localAllowed ? "https://github.com/org/repo  or  /path/on/the/server" : "https://github.com/org/repo"}
-            className="flex-1 font-mono text-xs"
+            className="min-w-0 flex-1 basis-60 font-mono text-xs"
             onKeyDown={(e) => e.key === "Enter" && !cloning && cloneGithub()}
             autoFocus
           />
+          {isPrivate && /^https?:\/\//.test(url.trim() || "https://") && (
+            <Tooltip content="Only needed for a private repository. Used once for the clone, never saved. Use a fine-grained token with read-only Contents access.">
+              <Input
+                type="password"
+                aria-label="Access token for a private repository (optional)"
+                autoComplete="off"
+                spellCheck={false}
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !cloning && cloneGithub()}
+                placeholder="Access token (optional)"
+                disabled={cloning}
+                className="w-full font-mono text-xs sm:w-52"
+              />
+            </Tooltip>
+          )}
           <Button onClick={cloneGithub} disabled={cloning || !url.trim()} className="shrink-0">
             {cloning ? (
               <>
