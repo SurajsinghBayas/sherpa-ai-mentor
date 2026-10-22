@@ -79,9 +79,20 @@ class Settings(BaseSettings):
     polly_access_key_id: str = ""
     polly_secret_access_key: str = ""
     polly_region: str = ""          # blank → aws_default_region
-    polly_voice: str = "Ruth"
+    polly_voice: str = "Matthew"
     # neural starts speaking in ~0.5s; generative sounds richer but takes ~2-3s per sentence
     polly_engine: str = "neural"    # neural | generative | standard; generative falls back to neural
+
+    # voice input (Amazon Transcribe streaming). IAM keys need transcribe:StartStreamTranscription
+    # (and StartStreamTranscriptionWebSocket). Blank keys → boto3's usual chain; no credentials →
+    # the web app uses the browser's own speech recognition.
+    transcribe_enabled: bool = True
+    transcribe_access_key_id: str = ""
+    transcribe_secret_access_key: str = ""
+    transcribe_region: str = "ap-south-1"
+    transcribe_language: str = "en-US"   # en-IN, en-GB, en-AU … are also streamed
+    voice_session_minutes: int = 20      # one voice conversation's websocket stays open at most this long
+    daily_voice_minutes: int = 90        # speech each user may send to Transcribe per day
 
     # email one-time codes (Gmail SMTP with an app password)
     smtp_host: str = ""

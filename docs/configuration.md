@@ -27,4 +27,4 @@ All settings are environment variables (or a `.env` file in the repo root); [`.e
 | `LOG_LEVEL` | `INFO` | Fallbacks log at `WARNING` |
 | `PRIVATE_TTL_HOURS` / `MAX_PRIVATE_REPOS` | 8 / 20 | Private mode: how long code stays in memory · how many private repos one server holds |
 | `POLLY_ACCESS_KEY_ID` / `POLLY_SECRET_ACCESS_KEY` / `POLLY_REGION` | — / — / `us-east-1` | Amazon Polly voice; blank → the browser's built-in voice |
-| `POLLY_VOICE` / `POLLY_ENGINE` | `Ruth` / `neural` | |
+| `POLLY_VOICE` / `POLLY_ENGINE` | `Matthew` / `neural` | |

@@ -233,7 +233,10 @@ export const api = {
   refreshDocs: (repo_id: string) => req<Docs>("/api/docs/refresh", post({ repo_id })),
   docsMarkdown: async (repo_id: string) => (await raw(`/api/docs/${repo_id}/markdown`)).text(),
 
-  voiceConfig: () => req<{ provider: "polly" | "browser"; voice: string | null; max_chars: number }>("/api/voice/config"),
+  voiceConfig: () =>
+    req<{ provider: "polly" | "browser"; voice: string | null; max_chars: number; stt: "transcribe" | "browser" }>(
+      "/api/voice/config"
+    ),
   /** MP3 from Amazon Polly; 503 when the API has no AWS credentials (callers fall back to the browser voice). */
   speak: async (text: string) => (await raw("/api/voice/speak", post({ text }))).blob(),
 

@@ -24,6 +24,29 @@ let usePolly: boolean | null = null; // null until the first attempt
 let run = 0; // bumps on every start/stop, so a stopped narration never resumes
 let audio: HTMLAudioElement | null = null;
 let audible = false; // sound is coming out right now (not between pieces, not while fetching)
+let volume = 1; // lowered while the user talks over Sherpa (see duck)
+const preloaded = new Map<string, Promise<Blob>>(); // short phrases fetched ahead (voice mode's fillers)
+
+/** Lower Sherpa's voice while the user starts talking over it, like a person pausing to listen;
+ *  restore it if it was only a cough. Only Polly audio can be ducked (browser speech can't). */
+export function duck(on: boolean) {
+  volume = on ? 0.15 : 1;
+  if (audio) audio.volume = volume;
+}
+
+/** Is Sherpa's voice coming out of the speakers right now? */
+export const isAudible = () => audible;
+
+/** Fetch Polly audio for short phrases now, so saying them later starts instantly. */
+export function preload(texts: string[]) {
+  if (usePolly === false) return;
+  for (const t of texts) {
+    if (preloaded.has(t)) continue;
+    const p = api.speak(t);
+    p.catch(() => preloaded.delete(t));
+    preloaded.set(t, p);
+  }
+}
 
 /** Markdown answer → text worth hearing: no code blocks, no markup, citations read as file names. */
 export function speakable(md: string): string {
@@ -60,6 +83,7 @@ function playBlob(blob: Blob, mine: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const a = new Audio(url);
+    a.volume = volume;
     audio = a;
     const done = (ok: boolean) => {
       URL.revokeObjectURL(url);
@@ -95,7 +119,7 @@ async function sayPolly(parts: string[], mine: number): Promise<number> {
   const fetched: Promise<Blob>[] = [];
   const get = (i: number) => {
     if (i < parts.length && !fetched[i]) {
-      fetched[i] = api.speak(parts[i]);
+      fetched[i] = preloaded.get(parts[i]) ?? api.speak(parts[i]);
       fetched[i].catch(() => {}); // awaited below; a stopped narration may never await it
     }
     return fetched[i];
@@ -142,6 +166,7 @@ export async function say(id: string, text: string): Promise<void> {
 export function stop() {
   run++;
   audible = false;
+  volume = 1;
   audio?.pause();
   audio = null;
   if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();

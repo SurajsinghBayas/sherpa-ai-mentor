@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from .agents.docs import (check_freshness, docs_markdown, generate_docs, get_docs,
                           refresh_docs)
 from .agents.mentor import answer_question
+from .spoken import correct as correct_spoken, vocabulary as spoken_vocabulary
 from .agents.overview import build_overview
 from .agents.tasks import suggest_starter_tasks
 from .agents.tour import build_tour
@@ -675,7 +676,10 @@ def ask(req: AskRequest, request: Request, user=Depends(get_current_user),
     store = get_store(req.repo_id, user, db)
     override = _resolve_llm(req.key_id, req.endpoint_id, user, db)
     _charge(db, user, "llm")
-    return answer_question(store, req.question.strip(), llm_override=override,
+    question = req.question.strip()
+    if req.spoken:  # heard, not typed: "deps dot py" → deps.py, using this repo's own names
+        question = correct_spoken(question, spoken_vocabulary(store))
+    return answer_question(store, question, llm_override=override,
                            history=req.history[-8:], spoken=req.spoken)
 
 

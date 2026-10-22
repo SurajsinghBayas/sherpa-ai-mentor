@@ -105,7 +105,8 @@ export function AskPanel({
   const [thinking, setThinking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [canListen, setCanListen] = useState(false);
+  const [canListen, setCanListen] = useState(false); // the browser can turn speech into text (dictation)
+  const [canConverse, setCanConverse] = useState(false); // voice mode: the browser or the API can
   const [listening, setListening] = useState(false);
   const recRef = useRef<{ stop: () => void } | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
@@ -162,6 +163,10 @@ export function AskPanel({
 
   useEffect(() => {
     setCanListen(recognitionSupported());
+    setCanConverse(recognitionSupported());
+    // with Amazon Transcribe on the API, voice mode works in any browser that has a mic
+    if (!recognitionSupported() && typeof navigator !== "undefined" && navigator.mediaDevices)
+      api.voiceConfig().then((c) => c.stt === "transcribe" && setCanConverse(true), () => {});
     try {
       setSpeakAnswers(localStorage.getItem("sherpa.speakAnswers") === "1");
     } catch {}
@@ -347,7 +352,7 @@ export function AskPanel({
               <Mic className="size-4" />
             </Button>
           )}
-          {canListen && (
+          {canConverse && (
             <Button
               size="icon-sm"
               variant="ghost"
@@ -388,7 +393,7 @@ export function AskPanel({
       </div>
       <AnimatePresence>
         {voiceMode && (
-          <VoiceMode repoName={repoName} ask={(q) => send(q, true, true)} onClose={() => setVoiceMode(false)} />
+          <VoiceMode repoId={repoId} repoName={repoName} ask={(q) => send(q, true, true)} onClose={() => setVoiceMode(false)} />
         )}
       </AnimatePresence>
     </div>

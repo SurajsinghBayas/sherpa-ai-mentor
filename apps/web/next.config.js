@@ -1,4 +1,30 @@
 /** @type {import('next').NextConfig} */
+const fs = require("fs");
+const path = require("path");
+
+// Voice mode's speech detector (Silero VAD on onnxruntime-web) loads its model, worklet and wasm
+// at runtime. Serve them from this app (public/vad, not committed) instead of a CDN, so voice
+// also works in the desktop app and offline.
+(function copyVadAssets() {
+  const dest = path.join(__dirname, "public", "vad");
+  const files = [
+    ["@ricky0123/vad-web/dist", "vad.worklet.bundle.min.js"],
+    ["@ricky0123/vad-web/dist", "silero_vad_v5.onnx"],
+    ["onnxruntime-web/dist", "ort-wasm-simd-threaded.wasm"],
+    ["onnxruntime-web/dist", "ort-wasm-simd-threaded.mjs"],
+  ];
+  fs.mkdirSync(dest, { recursive: true });
+  for (const [dir, name] of files) {
+    const from = path.join(__dirname, "node_modules", dir, name);
+    const to = path.join(dest, name);
+    try {
+      if (!fs.existsSync(to) || fs.statSync(to).size !== fs.statSync(from).size) fs.copyFileSync(from, to);
+    } catch (e) {
+      console.warn(`voice: couldn't copy ${name} (${e.message}); voice mode falls back to the browser's recognition`);
+    }
+  }
+})();
+
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },

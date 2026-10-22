@@ -25,6 +25,13 @@ def no_real_email(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_transcribe(monkeypatch):
+    """.env or ~/.aws may hold AWS keys — tests must never stream audio to (and pay for) Transcribe."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "transcribe_enabled", False)
+
+
+@pytest.fixture(autouse=True)
 def fresh_rate_limits():
     """Every test starts with empty rate-limit counters (they are per process)."""
     from app.guards import limiter
