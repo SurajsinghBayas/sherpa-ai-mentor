@@ -70,11 +70,11 @@ flowchart LR
   G -->|real file and lines| H[Answer with<br/>verified sources]
 ```
 
-1. **Every chunk knows where it lives.** Code is split along functions and classes and keeps its `file:start-end`. Chunks are embedded once (Amazon Nova) and reused across re-indexes and users.
+1. **Every chunk knows where it lives.** Code is split along functions and classes and keeps its `file:start-end`. Chunks are embedded once (Amazon Titan v2) and reused across re-indexes and users.
 2. **The model can only cite what it was shown.** Context is labelled by location; tours and tasks pick from numbered candidates, so a step can't point at invented code.
 3. **The verifier is the gate.** Each citation must resolve to a real file and line range. Invalid ones are removed; an answer with none is retried once and otherwise labelled unconfirmed.
 
-On the demo repository, **97% of citations were valid and 10 of 10 answers cited the file a maintainer would point to** ([eval](evals/results.md)). More in [How Sherpa works](docs/how-it-works.md).
+On the demo repository, **98% of citations were valid, every answer had a verified source, and 9 of 10 cited the file a maintainer would point to, with a median answer time of 3.3 s** ([eval](evals/results.md)). More in [How Sherpa works](docs/how-it-works.md).
 
 ## Quickstart
 
@@ -119,7 +119,7 @@ Details: [Security and privacy](docs/security.md).
 | Web and desktop | Next.js 14, React 18, TypeScript, Tailwind CSS, Framer Motion, Shiki; Tauri 2 for macOS and Windows |
 | API | Python 3.11, FastAPI, SQLAlchemy 2, Alembic |
 | Data | Amazon RDS for PostgreSQL with pgvector (SQLite locally) |
-| AI | Kimi K2.5 with Qwen3-Coder and DeepSeek V3.2 fallbacks on Amazon Bedrock; Amazon Nova embeddings; Amazon Polly voice |
+| AI | Qwen3-Coder with Kimi K2.5 and DeepSeek V3.2 fallbacks on Amazon Bedrock; Amazon Titan Text Embeddings v2; Amazon Polly voice |
 | Hosting | Ubuntu on AWS EC2, Docker (optional), GitHub Actions |
 
 ## Documentation

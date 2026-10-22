@@ -23,7 +23,7 @@
             │ chunks + full files +    │     └──────────┬────────────┘
             │ hashes · keyword search  │                │
             │ persist.py → Postgres +  │         ┌──────▼──────┐
-            │ pgvector (Nova embeds)   │         │             │
+            │ pgvector (Titan embeds)  │         │             │
             └──────────────────────────┘         │ llm.py      │ default model → fallbacks
                                                  │             │ → offline composer (logged)
                                                  └─────────────┘

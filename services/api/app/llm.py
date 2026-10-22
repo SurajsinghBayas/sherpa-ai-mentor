@@ -1,6 +1,6 @@
 """Pluggable LLM client — server default (Bedrock Mantle, OpenAI-compatible) + BYOK.
 
-Default model is Kimi K2.5 on Bedrock Mantle; if it errors, the next model in
+Default model is Qwen3-Coder on Bedrock Mantle; if it errors, the next model in
 LLM_FALLBACK_MODELS is tried. Every fallback (next model, offline composer) is
 logged so silent degradation is visible in the server log.
 """
@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+from functools import lru_cache
 
 from .config import load_local_env, settings
 
@@ -15,14 +16,28 @@ load_local_env()
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "moonshotai.kimi-k2.5"
-DEFAULT_FALLBACK_MODELS = "qwen.qwen3-coder-480b-a35b-instruct,deepseek.v3.2"
+DEFAULT_MODEL = "qwen.qwen3-coder-480b-a35b-instruct"
+DEFAULT_FALLBACK_MODELS = "moonshotai.kimi-k2.5,deepseek.v3.2"
 OPENAI_DEFAULT_BASE = "https://api.openai.com/v1"
 GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
 class LLMError(RuntimeError):
     pass
+
+
+@lru_cache(maxsize=4)
+def _server_openai(key: str, base: str, timeout: int):
+    """One long-lived client (and connection pool) for the server's own gateway.
+
+    A new client per call meant a fresh TLS handshake every time. BYOK keys never get here,
+    so a user's key isn't kept in memory after their request.
+    """
+    from openai import OpenAI
+    client = OpenAI(api_key=key, base_url=base, timeout=timeout, max_retries=1)
+    if not os.getenv("OPENAI_PROJECT_ID"):
+        client.project = None  # SDK defaults this from OPENAI_PROJECT_ID
+    return client
 
 
 class LLMClient:
@@ -119,9 +134,11 @@ class LLMClient:
             if not key:
                 raise LLMError(f"no API key for provider {prov}")
             # pin base_url: the SDK otherwise silently reads OPENAI_BASE_URL itself
-            client = OpenAI(api_key=key, base_url=base or OPENAI_DEFAULT_BASE,
-                            timeout=settings.llm_timeout_seconds, max_retries=1)
-            if byok or base_url or prov != "openai" or not os.getenv("OPENAI_PROJECT_ID"):
+            if prov == "openai" and not byok and not base_url:
+                client = _server_openai(key, base or OPENAI_DEFAULT_BASE, settings.llm_timeout_seconds)
+            else:
+                client = OpenAI(api_key=key, base_url=base or OPENAI_DEFAULT_BASE,
+                                timeout=settings.llm_timeout_seconds, max_retries=1)
                 client.project = None  # SDK defaults this from OPENAI_PROJECT_ID
             extra: dict = {}
             if prov == "openrouter":

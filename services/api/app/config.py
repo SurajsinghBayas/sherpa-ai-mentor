@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # retrieval / chunking
     data_dir: str = "./data"
     llm_provider: str = "none"  # none | openai | openrouter | anthropic | gemini | ollama
-    llm_model: str = ""          # blank + openai → moonshotai.kimi-k2.5 (see app/llm.py)
+    llm_model: str = ""          # blank + openai → qwen.qwen3-coder-480b-a35b-instruct (see app/llm.py)
     llm_fallback_models: str = ""  # comma-separated; tried in order when the main model fails
     openai_api_key: str = ""
     openai_base_url: str = ""   # e.g. https://bedrock-mantle.us-east-1.api.aws/v1
@@ -63,10 +63,12 @@ class Settings(BaseSettings):
     database_url: str = ""
     encryption_key: str = ""  # Fernet key; generated from jwt_secret_key if blank
 
-    # embeddings (Amazon Bedrock Nova) — stored in Postgres/pgvector; blank token → TF-IDF only
+    # embeddings (Amazon Bedrock) — stored in Postgres/pgvector; blank token → TF-IDF only.
+    # Titan v2 runs in ap-south-1 next to RDS and the LLM; Nova 2 (us-east-1 only) also works.
     aws_bearer_token_bedrock: str = ""
     aws_default_region: str = "us-east-1"
-    embedding_model: str = "amazon.nova-2-multimodal-embeddings-v1:0"
+    embedding_region: str = "ap-south-1"  # blank → aws_default_region
+    embedding_model: str = "amazon.titan-embed-text-v2:0"
     embedding_dim: int = 1024
     embedding_concurrency: int = 16
 

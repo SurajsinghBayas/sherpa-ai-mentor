@@ -7,6 +7,7 @@ code; untouched sections are left alone. A changelog records every refresh.
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from ..llm import LLMError, llm
 from ..retrieval import retrieve
@@ -110,7 +111,9 @@ def generate_docs(store: RepoStore, llm_override: dict | None = None) -> dict:
     from .overview import build_overview
     override = {k: v for k, v in (llm_override or {}).items() if v is not None}
     ov = build_overview(store, override)
-    sections = [_write_section(store, sid, t, b, ov, override) for sid, t, b in SECTIONS]
+    # sections are independent model calls: write them at once (~one call's time, not five)
+    with ThreadPoolExecutor(len(SECTIONS)) as pool:
+        sections = list(pool.map(lambda x: _write_section(store, *x, ov, override), SECTIONS))
     doc = {"repo": store.meta.get("name", store.repo_id), "generated_at": time.time(),
            "snapshot": store.snapshot_hash, "sections": sections,
            "changelog": [{"at": time.time(), "event": "generated",
@@ -153,13 +156,20 @@ def refresh_docs(store: RepoStore, llm_override: dict | None = None,
         return doc
     ov = build_overview(store, override)
     briefs = {sid: (t, b) for sid, t, b in SECTIONS}
+    todo = [(i, s) for i, s in enumerate(doc["sections"]) if s["stale"]]
+
+    def rewrite(item):
+        _, s = item
+        t, b = briefs.get(s["id"], (s["title"], s["title"]))
+        return _write_section(store, s["id"], t, b, ov, override, s["changed_files"])
+
+    with ThreadPoolExecutor(len(todo)) as pool:
+        fresh = list(pool.map(rewrite, todo))
     updated = []
-    for i, s in enumerate(doc["sections"]):
-        if s["stale"]:
-            t, b = briefs.get(s["id"], (s["title"], s["title"]))
-            doc["sections"][i] = _write_section(store, s["id"], t, b, ov, override, s["changed_files"])
-            doc["sections"][i]["previous_markdown"] = s["markdown"]
-            updated.append(s["id"])
+    for (i, s), new in zip(todo, fresh):
+        doc["sections"][i] = new
+        doc["sections"][i]["previous_markdown"] = s["markdown"]
+        updated.append(s["id"])
     doc["changelog"].append({"at": time.time(), "event": "refreshed", "sections": updated,
                              "changed_files": sorted({f for s in stale for f in s["changed_files"]}
                                                      | set(changed_files or []))[:50]})

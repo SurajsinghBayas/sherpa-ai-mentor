@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Protocol, Tuple
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -80,6 +81,9 @@ class MemoryBackend:
 
     def vector_scores(self, query, n):
         return None
+
+
+_SEARCH_POOL = ThreadPoolExecutor(8, thread_name_prefix="search")
 
 
 class RepoStore:
@@ -204,8 +208,10 @@ class RepoStore:
     def search(self, query: str, k: int = 8) -> List[Tuple[Chunk, float]]:
         if not self.chunks:
             return []
+        # the vector side waits on the network (embed + pgvector); score keywords meanwhile
+        vec_job = _SEARCH_POOL.submit(self._vector_scores, query)
         kw = self._keyword_scores(query)
-        vec = self._vector_scores(query)
+        vec = vec_job.result()
         # hybrid: normalize + combine
         def norm(xs):
             m = max(xs) if max(xs) > 0 else 1.0

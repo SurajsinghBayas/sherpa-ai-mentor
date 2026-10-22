@@ -6,7 +6,7 @@ All settings are environment variables (or a `.env` file in the repo root); [`.e
 |---|---|---|
 | `ENVIRONMENT` | `development` | `production` enables the startup safety checks |
 | `LLM_PROVIDER` | `none` | `openai` (any OpenAI-compatible gateway) · `openrouter` · `anthropic` · `gemini` · `ollama` |
-| `LLM_MODEL` | `moonshotai.kimi-k2.5` when provider is `openai` | |
+| `LLM_MODEL` | `qwen.qwen3-coder-480b-a35b-instruct` when provider is `openai` | |
 | `LLM_FALLBACK_MODELS` | `qwen.qwen3-coder-480b-a35b-instruct,deepseek.v3.2` | Tried in order; each fallback is logged |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` | — | e.g. `https://bedrock-mantle.ap-south-1.api.aws/v1` |
 | `JWT_SECRET_KEY` | dev value | Set a long random value in production |
@@ -14,7 +14,8 @@ All settings are environment variables (or a `.env` file in the repo root); [`.e
 | `GOOGLE_CLIENT_ID` | — | Google sign-in (OAuth client, Web application); button hidden when blank |
 | `DATABASE_URL` | SQLite | AWS RDS Postgres in production (see `docs/rds_setup.md`); holds accounts, repos, chunks and embeddings |
 | `AWS_BEARER_TOKEN_BEDROCK` | — | Bedrock API key for embeddings; blank → TF-IDF search |
-| `AWS_DEFAULT_REGION` / `EMBEDDING_MODEL` | `us-east-1` / `amazon.nova-2-multimodal-embeddings-v1:0` | |
+| `EMBEDDING_MODEL` / `EMBEDDING_REGION` | `amazon.titan-embed-text-v2:0` / `ap-south-1` | Titan v2 runs next to RDS and the LLM. `amazon.nova-2-multimodal-embeddings-v1:0` works too but only in `us-east-1`. After changing the model, run `make reembed` |
+| `AWS_DEFAULT_REGION` | `us-east-1` | Polly's region when `POLLY_REGION` is blank, and embeddings' when `EMBEDDING_REGION` is blank |
 | `DAILY_LLM_REQUESTS` / `DAILY_INGESTS` / `MAX_REPOS_PER_USER` | 300 / 30 / 15 | Per-user quotas |
 | `ENCRYPTION_KEY` | derived | Fernet key for stored user API keys |
 | `ALLOW_LOCAL_INGEST` | `false` | Lets the API read server folders; local dev only |

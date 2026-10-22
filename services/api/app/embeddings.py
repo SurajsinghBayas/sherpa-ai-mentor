@@ -1,4 +1,4 @@
-"""Text embeddings via Amazon Bedrock (Nova multimodal embeddings).
+"""Text embeddings via Amazon Bedrock (Titan Text v2 by default, or Nova multimodal).
 
 Uses a Bedrock API key (AWS_BEARER_TOKEN_BEDROCK) against the InvokeModel REST
 endpoint, so no AWS SDK is needed. Every failure is logged; callers fall back to
@@ -34,18 +34,28 @@ class Embedder:
         return bool(settings.aws_bearer_token_bedrock and settings.embedding_model)
 
     def _url(self) -> str:
-        return (f"https://bedrock-runtime.{settings.aws_default_region}.amazonaws.com"
-                f"/model/{self.model}/invoke")
+        region = settings.embedding_region or settings.aws_default_region
+        return f"https://bedrock-runtime.{region}.amazonaws.com/model/{self.model}/invoke"
+
+    def _body(self, text: str, purpose: str) -> dict:
+        text = text[:MAX_CHARS] or " "
+        if "titan-embed" in self.model:  # Titan has no query/document purpose
+            return {"inputText": text, "dimensions": self.dim, "normalize": True}
+        return {"taskType": "SINGLE_EMBEDDING", "singleEmbeddingParams": {
+            "embeddingPurpose": purpose, "embeddingDimension": self.dim,
+            "text": {"truncationMode": "END", "value": text}}}
+
+    @staticmethod
+    def _vector(data: dict) -> List[float]:
+        return data["embedding"] if "embedding" in data else data["embeddings"][0]["embedding"]
 
     def _one(self, client: httpx.Client, text: str, purpose: str) -> List[float]:
-        body = {"taskType": "SINGLE_EMBEDDING", "singleEmbeddingParams": {
-            "embeddingPurpose": purpose, "embeddingDimension": self.dim,
-            "text": {"truncationMode": "END", "value": text[:MAX_CHARS] or " "}}}
+        body = self._body(text, purpose)
         headers = {"Authorization": f"Bearer {settings.aws_bearer_token_bedrock}"}
         for attempt in range(4):
             r = client.post(self._url(), json=body, headers=headers)
             if r.status_code == 200:
-                return r.json()["embeddings"][0]["embedding"]
+                return self._vector(r.json())
             if r.status_code in (429, 500, 502, 503, 504) and attempt < 3:
                 time.sleep(0.5 * 2 ** attempt)
                 continue
@@ -92,10 +102,13 @@ class Embedder:
             return None
 
 
+# one long-lived connection for questions: a fresh TLS handshake per question cost ~1 s
+_query_client = httpx.Client(timeout=20)
+
+
 @lru_cache(maxsize=512)
 def _cached_query(model: str, dim: int, text: str) -> tuple:
-    with httpx.Client(timeout=20) as client:
-        return tuple(embedder._one(client, text, "GENERIC_RETRIEVAL"))
+    return tuple(embedder._one(_query_client, text, "GENERIC_RETRIEVAL"))
 
 
 embedder = Embedder()

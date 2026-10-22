@@ -1,4 +1,4 @@
-.PHONY: api web dev test lint eval ingest ask refresh-docs cli-sync desktop desktop-build
+.PHONY: api web dev test lint eval reembed ingest ask refresh-docs cli-sync desktop desktop-build
 
 API_DIR=services/api
 WEB_DIR=apps/web
@@ -27,6 +27,10 @@ test:
 
 lint:
 	cd $(API_DIR) && (ruff check app tests || true) && python -m compileall -q app
+
+# after changing EMBEDDING_MODEL: embed every saved repo with the new model
+reembed:
+	cd $(API_DIR) && env -u AWS_BEARER_TOKEN_BEDROCK python3 -m app.reembed
 
 eval:
 	cd $(API_DIR) && python ../../evals/run_eval.py

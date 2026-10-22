@@ -68,15 +68,19 @@ def _gather(store: RepoStore, question: str, k: int) -> List[Tuple[Chunk, float]
 SPOKEN_FORMAT = (
     "FORMAT (this answer is read aloud in a voice conversation):\n"
     "Answer in 2-5 short, plain sentences, the way you'd explain it to a colleague out loud. "
-    "No headings, lists, tables or code blocks; name identifiers in plain words. "
+    "No headings, lists, tables, code blocks or 'Evidence' section; name identifiers in plain words. "
     "End with a short question offering to go deeper.\n"
 )
 WRITTEN_FORMAT = (
-    "FORMAT (GitHub markdown):\n"
-    "1. Start with a direct 2-4 sentence answer.\n"
-    "2. A '**How it works**' section: numbered steps or bullets in execution order.\n"
-    "3. A '**Try next**' line with one concrete follow-up.\n"
-    "Use `inline code` for identifiers, short ```lang fenced``` snippets only if essential.\n"
+    "FORMAT (GitHub markdown, shown in a chat panel):\n"
+    "1. Open with a direct 2-4 sentence answer, with no heading or label before it.\n"
+    "2. Then the line **How it works** (bold, exactly that), followed by 3-6 numbered steps in "
+    "execution order, one or two sentences each.\n"
+    "3. End with **Try next:** and one concrete follow-up on the same line.\n"
+    "Never use # headings, tables or horizontal rules, and no other sections (no 'Evidence' or "
+    "'Summary'). Each citation goes at the end of the sentence or step it supports, on the same "
+    "line, never on a line of its own or as a sub-bullet. Use `inline code` for identifiers and "
+    "short ```lang fenced``` snippets only if essential. Keep it under about 220 words.\n"
 )
 
 

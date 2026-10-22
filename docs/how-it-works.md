@@ -8,21 +8,31 @@ question ─▶ alias expansion ─▶ hybrid retrieval (pgvector embeddings + k
         ─▶ CitationVerifier ─▶ answer with only verified [file:L1-L2] citations
 ```
 
-1. **Provenance-first chunks.** Every chunk carries `file:start-end`. Python is split on `def`/`class` via `ast`, and other files by blocks. Chunks are embedded with Amazon Nova embeddings and stored in Postgres with pgvector, keyed by content hash so unchanged code is never re-embedded. Without Postgres or a Bedrock key, search falls back to TF-IDF (logged).
+1. **Provenance-first chunks.** Every chunk carries `file:start-end`. Python is split on `def`/`class` via `ast`, and other files by blocks. Chunks are embedded with Amazon Titan Text Embeddings v2 (in ap-south-1, next to the database) and stored in Postgres with pgvector, keyed by content hash so unchanged code is never re-embedded. Without Postgres or a Bedrock key, search falls back to TF-IDF (logged).
 2. **The model can only cite what it was shown.** Prompts list each chunk under a `--- path:start-end ---` header. Tours and tasks go further: the model picks from numbered candidates (`C3`, `T2`), so a step can never point at invented code.
 3. **The verifier is the gate.** Each citation must resolve to a real file, with a line range inside it. Ghost citations are removed from the text, and combined ones (`[a.py:1-5, 9-12]`) are split. If an answer has no valid citations, the model gets one retry. If it still has none, the answer is labelled unconfirmed.
 4. **Secrets never reach the model.** Ingest skips `.env*` files (templates like `.env.example` are kept), databases, keys, lockfiles and binaries.
 
 ## Model choice
 
-The default LLM is **Kimi K2.5** (`moonshotai.kimi-k2.5`) on AWS Bedrock Mantle (OpenAI-compatible), so no user key is needed. We benchmarked the models available on that endpoint with grounded questions over the same repo:
+The default LLM is **Qwen3-Coder** (`qwen.qwen3-coder-480b-a35b-instruct`) on AWS Bedrock Mantle (OpenAI-compatible), so no user key is needed, with Kimi K2.5 and DeepSeek V3.2 as fallbacks.
+
+The full grounding eval (10 golden questions on the demo repo, Titan embeddings, one model each, 2026-10-22):
+
+| Model | Median answer time | Valid citations | Cites the expected file |
+|---|---|---|---|
+| **qwen.qwen3-coder-480b-a35b-instruct** ✅ | **3.2 s** | 98% (1 of 56 removed by the verifier) | 9/10 |
+| moonshotai.kimi-k2.5 (previous default, **first fallback**) | 4.9 s | 100% | 9/10 |
+| deepseek.v3.2 (**second fallback**) | 6.1 s | 100% | 10/10 |
+
+An earlier, smaller benchmark (3 questions) of the models on that endpoint:
 
 | Model | Avg latency | Valid citations (3 Qs) | Notes |
 |---|---|---|---|
-| **moonshotai.kimi-k2.5** ✅ | 2.8 s | **18** | Best-structured answers (direct answer → evidence → try next); JSON valid 3/3 |
-| qwen.qwen3-coder-480b-a35b-instruct | 2.2 s | 11 | Fastest; plainer formatting. **First fallback** |
+| moonshotai.kimi-k2.5 | 2.8 s | **18** | Best-structured answers (direct answer → evidence → try next); JSON valid 3/3 |
+| qwen.qwen3-coder-480b-a35b-instruct | 2.2 s | 11 | Fastest; plainer formatting |
 | zai.glm-4.7 | 2.7 s | 13 | Good, slightly less structured |
-| deepseek.v3.2 (previous default) | 3.7 s | 14 | **Second fallback** |
+| deepseek.v3.2 | 3.7 s | 14 | |
 | mistral.devstral-2-123b | 5.4 s | 15 | Slowest |
 | anthropic.claude-sonnet-5 | — | — | Listed, but returns 404 on this endpoint with these credentials |
 
