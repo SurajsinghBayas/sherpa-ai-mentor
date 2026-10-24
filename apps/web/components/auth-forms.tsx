@@ -10,6 +10,7 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff, Github, Loader2, Mail } from "lucid
 import { API, api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { isNativeApp } from "../lib/desktop";
+import { inExtension } from "../lib/extension";
 import { startGitHub } from "../lib/github-auth";
 import { cn } from "../lib/utils";
 import { Button, Input, Label } from "./ui/primitives";
@@ -471,10 +472,29 @@ function AuthPage({ mode }: { mode: Mode }) {
             )}
             {(cfg?.google_client_id || cfg?.github) && (
               <>
-                <div className="space-y-2.5">
-                  {cfg.google_client_id && <GoogleButton clientId={cfg.google_client_id} mode={mode} onBusy={setBusy} />}
-                  {cfg.github && <GitHubButton mode={mode} onBusy={setBusy} />}
-                </div>
+                {inExtension() ? (
+                  // Google and GitHub can't open inside the extension's panel: sign in on the site, and the
+                  // extension brings the session back here
+                  <div className="space-y-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      className="h-11 w-full"
+                      onClick={() => window.open(`${window.location.origin}/login`, "_blank", "noopener")}
+                    >
+                      <Github /> Continue with Google or GitHub
+                    </Button>
+                    <p className="text-center text-xs text-muted-foreground">
+                      Opens Sherpa in a tab. Once you&apos;re signed in there, this panel signs in too.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {cfg.google_client_id && <GoogleButton clientId={cfg.google_client_id} mode={mode} onBusy={setBusy} />}
+                    {cfg.github && <GitHubButton mode={mode} onBusy={setBusy} />}
+                  </div>
+                )}
                 <div className="eyebrow flex items-center gap-3">
                   <span className="h-px flex-1 bg-border" />
                   or

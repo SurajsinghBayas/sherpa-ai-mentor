@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sherpa AI</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <span class="wordmark">
+        <img src="icons/head.svg" alt="" width="22" height="18" />
+        <span>Sherpa <b>AI</b></span>
+      </span>
+      <span class="actions">
+        <button id="reload" class="icon" title="Reload" aria-label="Reload">
+          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" /><path d="M3 21v-5h5" /></svg>
+        </button>
+        <button id="tab" class="icon" title="Open in a tab" aria-label="Open in a tab">
+          <svg viewBox="0 0 24 24"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+        </button>
+      </span>
+    </header>
+
+    <section id="repo" class="repo" hidden>
+      <span class="host" id="host"></span>
+      <span class="name">
+        <span class="eyebrow">On your screen</span>
+        <span id="slug" class="slug"></span>
+      </span>
+      <button id="open" class="open">Open in Sherpa</button>
+    </section>
+    <section id="hint" class="hint" hidden>
+      Open a repository on GitHub, GitLab or Bitbucket and it shows up here, ready to explore.
+    </section>
+
+    <main class="frame">
+      <iframe id="app" title="Sherpa AI" allow="clipboard-read; clipboard-write; microphone"></iframe>
+      <div id="loading" class="loading"><span class="dot"></span>Loading Sherpa…</div>
+    </main>
+
+    <script src="panel.js"></script>
+  </body>
+</html>

@@ -42,6 +42,12 @@ const NAV: { id: TabId; icon: typeof Map; label: string; short: string; hint: st
 ];
 
 const LAST_REPO_KEY = "sherpa.repo";
+
+/** github.com/Owner/Repo.git and https://github.com/owner/repo/ are the same repository. */
+function sameRepo(a: string, b: string) {
+  const norm = (u: string) => u.trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/(\.git)?\/*$/, "");
+  return norm(a) === norm(b);
+}
 const RECHECK_MS = 5 * 60_000; // while the tab is open
 const FOCUS_RECHECK_MS = 2 * 60_000; // when the user comes back to the tab
 
@@ -264,10 +270,38 @@ export function Dashboard() {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
 
+  // ?repo=<url> (the Chrome extension opens the repo on screen): select it if indexed, else offer to index it
+  const deepLink = useRef<string | null>(null);
+  const [importUrl, setImportUrl] = useState<string | undefined>();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const repo = params.get("repo");
+    if (!repo || !/^https:\/\/(github\.com|gitlab\.com|bitbucket\.org)\//.test(repo)) return;
+    deepLink.current = repo;
+    params.delete("repo");
+    window.history.replaceState(null, "", window.location.pathname + (params.size ? `?${params}` : ""));
+  }, []);
+
   const loadRepos = useCallback(async (selectId?: string) => {
     try {
       const { repos } = await api.repos();
       setRepos(repos);
+      const link = deepLink.current;
+      if (link && !selectId) {
+        deepLink.current = null;
+        const match = repos.find((r) => sameRepo(r.source, link));
+        if (match) {
+          selectId = match.repo_id;
+          try {
+            localStorage.setItem(LAST_REPO_KEY, match.repo_id);
+          } catch {
+            /* storage unavailable — fine */
+          }
+        } else {
+          setImportUrl(link);
+          setAdding(true);
+        }
+      }
       let want = selectId;
       try {
         want = want || localStorage.getItem(LAST_REPO_KEY) || undefined;
@@ -287,8 +321,8 @@ export function Dashboard() {
   }, [user, loadRepos]);
 
   useEffect(() => {
-    // show the importer only when there is nothing to work on yet
-    setAdding(!current);
+    // show the importer only when there is nothing to work on yet, or a repo is waiting to be indexed
+    setAdding(!current || importUrl !== undefined);
   }, [current?.repo_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -540,10 +574,13 @@ export function Dashboard() {
             // a page of its own while open: the panels underneath stay mounted but hidden
             <div className="scroll-thin min-h-0 flex-1 overflow-y-auto bg-card px-4 pb-10 sm:px-6 sm:pt-4">
               <ImportSource
+                key={importUrl}
+                initialUrl={importUrl}
                 localAllowed={!!health?.local_ingest}
                 privateTtlHours={health?.private_ttl_hours}
                 onIndexed={(id) => {
                   setAdding(false);
+                  setImportUrl(undefined);
                   try {
                     localStorage.setItem(LAST_REPO_KEY, id);
                   } catch {
@@ -551,7 +588,7 @@ export function Dashboard() {
                   }
                   loadRepos(id);
                 }}
-                onCancel={current ? () => setAdding(false) : undefined}
+                onCancel={current ? () => { setAdding(false); setImportUrl(undefined); } : undefined}
               />
             </div>
           )}

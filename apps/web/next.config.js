@@ -27,7 +27,8 @@ const path = require("path");
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-Frame-Options", value: "DENY" },
+  // no framing, except by the Sherpa Chrome extension's side panel (its ID: lib/extension.ts)
+  { key: "Content-Security-Policy", value: "frame-ancestors 'self' chrome-extension://fdkgmkljfocklogkbofnibealpjflcho" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
   // Google sign-in opens a popup that must be able to message this window back

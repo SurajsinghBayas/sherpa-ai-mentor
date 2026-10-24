@@ -5,7 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Toaster } from "sonner";
 import { AuthProvider } from "../lib/auth";
+import { tokenStore } from "../lib/api";
 import { isDesktop, isMobileApp, isNativeApp } from "../lib/desktop";
+import { inExtension, listenForToken } from "../lib/extension";
 import { TooltipProvider } from "./ui/primitives";
 
 function ThemedToaster() {
@@ -34,8 +36,26 @@ function AppShell() {
   const { resolvedTheme } = useTheme();
 
   useEffect(() => {
-    if (isNativeApp() && path === "/") router.replace("/dashboard");
+    if ((isNativeApp() || inExtension()) && path === "/") router.replace("/dashboard");
   }, [path, router]);
+
+  useEffect(() => {
+    // in the Chrome extension's side panel: share the session with it, and open other sites in a tab
+    // (GitHub and Google refuse to load inside a frame)
+    if (!inExtension()) return;
+    const stop = listenForToken(tokenStore.get, (t) => (t ? localStorage.setItem("sherpa.jwt", t) : localStorage.removeItem("sherpa.jwt")));
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || !/^https?:/.test(a.href) || new URL(a.href).origin === window.location.origin) return;
+      e.preventDefault();
+      window.open(a.href, "_blank", "noopener");
+    };
+    document.addEventListener("click", onClick);
+    return () => {
+      stop();
+      document.removeEventListener("click", onClick);
+    };
+  }, []);
 
   useEffect(() => {
     // the phone apps are fixed-scale like any native app: no pinch or double-tap zoom to pan around in

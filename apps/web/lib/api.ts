@@ -1,6 +1,7 @@
 // Typed API client — token in localStorage, JSON everywhere, honest errors.
 
 import { isMobileApp } from "./desktop";
+import { shareToken } from "./extension";
 
 declare global {
   interface Window {
@@ -34,8 +35,14 @@ const TOKEN_KEY = "sherpa.jwt";
 
 export const tokenStore = {
   get: () => (typeof window === "undefined" ? null : localStorage.getItem(TOKEN_KEY)),
-  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  set: (t: string) => {
+    localStorage.setItem(TOKEN_KEY, t);
+    shareToken(t);
+  },
+  clear: () => {
+    localStorage.removeItem(TOKEN_KEY);
+    shareToken(null);
+  },
 };
 
 export class ApiError extends Error {

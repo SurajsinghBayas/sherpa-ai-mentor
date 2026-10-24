@@ -134,14 +134,17 @@ export function ImportSource({
   privateTtlHours = 8,
   onIndexed,
   onCancel,
+  initialUrl,
 }: {
   localAllowed: boolean;
   privateTtlHours?: number;
   onIndexed: (repoId: string) => void;
   onCancel?: () => void;
+  /** a repository to offer for indexing (from the Chrome extension) */
+  initialUrl?: string;
 }) {
   const [source, setSource] = useState<Source>("github");
-  const [url, setUrl] = useState(onCancel ? "" : DEMO_REPO);
+  const [url, setUrl] = useState(initialUrl ?? (onCancel ? "" : DEMO_REPO));
   const [isPrivate, setIsPrivate] = useState(false);
   const [token, setToken] = useState("");
   const [cloning, setCloning] = useState<string | null>(null); // the source being cloned

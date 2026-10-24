@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Sherpa AI — codebase mentor",
+  "short_name": "Sherpa AI",
+  "version": "1.0.0",
+  "description": "Open the GitHub, GitLab or Bitbucket repository on your screen in Sherpa: cited answers, maps, tours, docs and quizzes in a side panel.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsWoHq11hAqYPChlrUi76EtHk1XAabJhiLChuXuPE2QE1cHjDbuG1PNEzYjIqXc9EBNpWnNTGqoC3Sv34nqZF9nOyR4o8Jct7Z0O+gCDNz315dAWUg1ryoZ5UnaG1gQpOcFktVH5kLpSjy6XQ8FVO4aryKk8z8dYTZxGsxkIqq4tx9wgLUD/YoMUVF5OWSiD+bc7faq+scUviNdHOvONB3gzUJ5effnEUWQ+VKNn5uiQ2pK9ela3+f4SyZLq+lutzO7gz/PHJhJzsJZOrn/A+3V+NtEZP3m1rHkfztM5Nla+iOF7wek3gmw24+Qr1CGIr2WWrwyIv2bnS63NYEKQsDwIDAQAB",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Open this repo in Sherpa AI",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "side_panel": { "default_path": "panel.html" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["sidePanel", "storage"],
+  "host_permissions": [
+    "https://github.com/*",
+    "https://gitlab.com/*",
+    "https://bitbucket.org/*",
+    "https://sherpa-ai.tech/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://sherpa-ai.tech/*"],
+      "js": ["session.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Open Sherpa AI"
+    }
+  }
+}
