@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import {
-  AlertCircle, BookOpen, CheckCircle2, ChevronsUpDown, Command as CommandIcon, Ellipsis, FolderGit2, ListTodo,
-  Lock, Map, MessageSquare, Moon, Plus, RefreshCw, Route, Search, Trash2, Upload,
+  AlertCircle, BookOpen, Building2, CheckCircle2, ChevronsUpDown, Command as CommandIcon, Ellipsis, FolderGit2, ListTodo,
+  Cog, GraduationCap, Lock, Map, MessageSquare, Moon, Plus, RefreshCw, Route, Search, Trash2, Upload,
 } from "lucide-react";
 import { api, ApiError, type Health, type Repo } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -17,20 +17,26 @@ import { CommandPalette, type PaletteItem } from "./command-palette";
 import { Sherpa } from "./sherpa";
 import { Button, ConfirmDialog, Kbd, Menu, Tooltip } from "./ui/primitives";
 import { AskPanel } from "./workspace/ask-panel";
+import { CityPanel } from "./workspace/city-panel";
 import { DocsPanel } from "./workspace/docs-panel";
+import { MachinePanel } from "./workspace/machine-panel";
 import { OverviewPanel } from "./workspace/overview-panel";
+import { QuizPanel } from "./workspace/quiz-panel";
 import { Dots, timeAgo, timeLeft } from "./workspace/shared";
 import { TasksPanel } from "./workspace/tasks-panel";
 import { TourPanel } from "./workspace/tour-panel";
 
-type TabId = "ask" | "overview" | "tour" | "tasks" | "docs";
+type TabId = "ask" | "overview" | "machine" | "city" | "tour" | "tasks" | "docs" | "quiz";
 
 const NAV: { id: TabId; icon: typeof Map; label: string; short: string; hint: string }[] = [
   { id: "overview", icon: Map, label: "Architecture", short: "Map", hint: "Main parts and how they connect" },
+  { id: "machine", icon: Cog, label: "Pipeline machine", short: "Machine", hint: "How the agent, ML or workflow runs" },
+  { id: "city", icon: Building2, label: "Repo city", short: "City", hint: "Every file, and how it grew" },
   { id: "ask", icon: MessageSquare, label: "Ask Sherpa", short: "Ask", hint: "How and why, with sources" },
   { id: "tour", icon: Route, label: "Code tours", short: "Tours", hint: "Walk a flow step by step" },
   { id: "tasks", icon: ListTodo, label: "Starter tasks", short: "Tasks", hint: "Your first contribution" },
   { id: "docs", icon: BookOpen, label: "Living docs", short: "Docs", hint: "Onboarding guide, kept in sync" },
+  { id: "quiz", icon: GraduationCap, label: "Skill check", short: "Skills", hint: "How well you know this code" },
 ];
 
 const LAST_REPO_KEY = "sherpa.repo";
@@ -229,13 +235,21 @@ export function Dashboard() {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [current, setCurrent] = useState<Repo | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
-  const [tab, setTab] = useState<TabId>("overview");
+  const [tab, showTab] = useState<TabId>("overview");
   const [busy, setBusy] = useState<string | null>(null);
   const [askSeed, setAskSeed] = useState("");
   const [tourSeed, setTourSeed] = useState("");
   const [freshness, setFreshness] = useState<Freshness>({ state: "idle" });
   const [indexRev, setIndexRev] = useState(0); // bumps when the index changes → map & tasks reload
   const [adding, setAdding] = useState(false);
+  // picking a page leaves "Add a repository" (it covers the panels while open), once there is a repo to show
+  const setTab = useCallback(
+    (id: TabId) => {
+      showTab(id);
+      if (currentRef.current) setAdding(false);
+    },
+    [] // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [palette, setPalette] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
@@ -465,23 +479,26 @@ export function Dashboard() {
             <RepoSwitcher repos={repos} current={current} onSelect={select} onAdd={() => setAdding(true)} />
           </div>
           <nav aria-label="Workspace" className="flex-1 space-y-0.5 px-3 py-1">
-            {NAV.map(({ id, icon: Icon, label, hint }) => (
+            {NAV.map(({ id, icon: Icon, label, hint }) => {
+              const on = tab === id && !adding;
+              return (
               <button
                 key={id}
                 onClick={() => setTab(id)}
-                aria-current={tab === id ? "page" : undefined}
+                aria-current={on ? "page" : undefined}
                 className={cn(
                   "group flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors duration-150",
-                  tab === id ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                  on ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
                 )}
               >
-                <Icon className={cn("mt-0.5 size-4 shrink-0", tab === id && "text-primary")} />
+                <Icon className={cn("mt-0.5 size-4 shrink-0", on && "text-primary")} />
                 <span className="min-w-0">
                   <span className="block text-[13px] font-medium">{label}</span>
                   <span className="block truncate text-[11px] text-muted-foreground">{hint}</span>
                 </span>
               </button>
-            ))}
+              );
+            })}
           </nav>
 
           {/* Sherpa's status: what the guide is doing right now */}
@@ -518,7 +535,8 @@ export function Dashboard() {
           />
 
           {adding && (
-            <div className="scroll-thin max-h-[70dvh] shrink-0 overflow-y-auto border-b border-border bg-card px-4 pb-4">
+            // a page of its own while open: the panels underneath stay mounted but hidden
+            <div className="scroll-thin min-h-0 flex-1 overflow-y-auto bg-card px-4 pb-10 sm:px-6 sm:pt-4">
               <ImportSource
                 localAllowed={!!health?.local_ingest}
                 privateTtlHours={health?.private_ttl_hours}
@@ -536,7 +554,7 @@ export function Dashboard() {
             </div>
           )}
 
-          <div role="tablist" aria-label="Panels" className="no-scrollbar flex border-b border-border bg-card px-1 sm:hidden">
+          <div role="tablist" aria-label="Panels" className={cn("no-scrollbar flex overflow-x-auto border-b border-border bg-card px-1 sm:hidden", adding && "hidden")}>
             {NAV.map(({ id, icon: Icon, short }) => (
               <button
                 key={id}
@@ -544,7 +562,7 @@ export function Dashboard() {
                 aria-selected={tab === id}
                 onClick={() => setTab(id)}
                 className={cn(
-                  "flex flex-1 flex-col items-center gap-0.5 border-b-2 py-2 text-[11px] font-medium",
+                  "flex min-w-[3.75rem] flex-1 shrink-0 flex-col items-center gap-0.5 border-b-2 py-2 text-[11px] font-medium",
                   tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground"
                 )}
               >
@@ -556,9 +574,12 @@ export function Dashboard() {
 
           {/* every panel stays mounted so results survive tab switches; keyed by repo so they reset on switch,
               and the map and tasks also reload when the index changes (the chat and tours keep their history) */}
-          {(["overview", "ask", "tour", "tasks", "docs"] as TabId[]).map((id) => (
-            <div key={`${id}-${repoId}${id === "overview" || id === "tasks" ? `-${indexRev}` : ""}`} className={cn("flex min-h-0 flex-1 flex-col", tab !== id && "hidden")}>
+          {(["overview", "machine", "city", "ask", "tour", "tasks", "docs", "quiz"] as TabId[]).map((id) => (
+            <div key={`${id}-${repoId}${["overview", "machine", "city", "tasks", "quiz"].includes(id) ? `-${indexRev}` : ""}`} className={cn("flex min-h-0 flex-1 flex-col", (tab !== id || adding) && "hidden")}>
               {id === "ask" && <AskPanel repoId={repoId} repoName={current?.name || ""} seed={askSeed} onSeedUsed={clearAsk} />}
+              {id === "city" && <CityPanel repoId={repoId} busy={busy} setBusy={setBusy} onAsk={askAbout} />}
+              {id === "quiz" && <QuizPanel repoId={repoId} busy={busy} setBusy={setBusy} onAsk={askAbout} onTour={tourFlow} />}
+              {id === "machine" && <MachinePanel repoId={repoId} busy={busy} setBusy={setBusy} onAsk={askAbout} />}
               {id === "overview" && <OverviewPanel repoId={repoId} busy={busy} setBusy={setBusy} onTour={tourFlow} />}
               {id === "tour" && (
                 <TourPanel repoId={repoId} busy={busy} setBusy={setBusy} seed={tourSeed} onSeedUsed={clearTour} onAsk={askAbout} />

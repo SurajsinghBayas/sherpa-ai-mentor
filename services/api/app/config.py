@@ -104,6 +104,9 @@ class Settings(BaseSettings):
 
     # Google sign-in (OAuth client ID of type "Web application")
     google_client_id: str = ""
+    # GitHub sign-in (a GitHub App's client ID and secret). Also lists a signed-in user's public repos.
+    github_client_id: str = ""
+    github_client_secret: str = ""
 
     # per-user quotas (reset daily, UTC)
     daily_llm_requests: int = 300

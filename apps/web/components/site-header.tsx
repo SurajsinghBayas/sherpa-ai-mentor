@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { KeyRound, LogOut, Moon, Sun, Terminal } from "lucide-react";
+import { KeyRound, LogOut, Moon, Sun, Terminal, UserRound } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { cn } from "../lib/utils";
 import { Wordmark } from "./sherpa";
@@ -82,6 +82,9 @@ export function SiteHeader() {
                   <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                 </div>
                 <Menu.Separator />
+                <Menu.Item onClick={() => router.push("/profile")}>
+                  <UserRound /> Profile
+                </Menu.Item>
                 <Menu.Item onClick={() => router.push("/settings")}>
                   <KeyRound /> Keys & endpoints
                 </Menu.Item>

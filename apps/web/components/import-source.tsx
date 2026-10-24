@@ -8,6 +8,7 @@ import { formatBytes, planFolder, zipFolder, type FolderPlan } from "../lib/sour
 import { cn } from "../lib/utils";
 import NumberFlow from "@number-flow/react";
 import { CliQuickstart } from "./cli-guide";
+import { GitHubRepos } from "./github-repos";
 import { Sherpa } from "./sherpa";
 import { Badge, Button, Input, Tabs, Tooltip } from "./ui/primitives";
 
@@ -143,7 +144,7 @@ export function ImportSource({
   const [url, setUrl] = useState(onCancel ? "" : DEMO_REPO);
   const [isPrivate, setIsPrivate] = useState(false);
   const [token, setToken] = useState("");
-  const [cloning, setCloning] = useState(false);
+  const [cloning, setCloning] = useState<string | null>(null); // the source being cloned
   const [phase, setPhase] = useState<Phase>({ kind: "pick" });
   const [name, setName] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -216,10 +217,10 @@ export function ImportSource({
     if (dirInput.current) dirInput.current.value = "";
   }, []);
 
-  async function cloneGithub() {
-    const s = url.trim();
+  async function cloneGithub(from = url) {
+    const s = from.trim();
     if (!s) return;
-    setCloning(true);
+    setCloning(s);
     try {
       const isUrl = /^https?:\/\//.test(s);
       const t = isPrivate && isUrl ? token.trim() : "";
@@ -240,7 +241,7 @@ export function ImportSource({
       toast.error(e instanceof ApiError ? e.message : "Indexing failed");
     } finally {
       setToken(""); // used for one clone only; don't keep it around
-      setCloning(false);
+      setCloning(null);
     }
   }
 
@@ -345,7 +346,7 @@ export function ImportSource({
             if (!v) setToken("");
           }}
           ttlHours={privateTtlHours}
-          disabled={cloning}
+          disabled={!!cloning}
         />
       )}
       {source === "github" && (
@@ -369,12 +370,12 @@ export function ImportSource({
                 onChange={(e) => setToken(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !cloning && cloneGithub()}
                 placeholder="Access token (optional)"
-                disabled={cloning}
+                disabled={!!cloning}
                 className="w-full font-mono text-xs sm:w-52"
               />
             </Tooltip>
           )}
-          <Button onClick={cloneGithub} disabled={cloning || !url.trim()} className="shrink-0">
+          <Button onClick={() => cloneGithub()} disabled={!!cloning || !url.trim()} className="shrink-0">
             {cloning ? (
               <>
                 <Loader2 className="animate-spin" /> Indexing
@@ -385,6 +386,7 @@ export function ImportSource({
           </Button>
         </div>
       )}
+      {source === "github" && <GitHubRepos indexing={cloning} onIndex={(u) => cloneGithub(u)} onOpen={onIndexed} />}
       {source === "github" && cloning && (
         <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground" role="status">
           <Sherpa pose="walking" size={48} decorative />

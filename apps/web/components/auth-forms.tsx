@@ -6,16 +6,17 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { OTPInput, REGEXP_ONLY_DIGITS } from "input-otp";
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Mail } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Github, Loader2, Mail } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { isDesktop } from "../lib/desktop";
+import { startGitHub } from "../lib/github-auth";
 import { cn } from "../lib/utils";
 import { Button, Input, Label } from "./ui/primitives";
 import { Sherpa, type Pose } from "./sherpa";
 
 type Mode = "login" | "signup";
-type AuthConfig = { google_client_id: string | null; email_otp: boolean; password: boolean };
+type AuthConfig = { google_client_id: string | null; github?: boolean; email_otp: boolean; password: boolean };
 
 function errorText(err: unknown, fallback: string) {
   return err instanceof ApiError ? err.message : fallback;
@@ -35,8 +36,8 @@ function useFinish() {
 function useAuthConfig() {
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
   useEffect(() => {
-    // Google only accepts web origins it knows; the desktop app (tauri://) signs in with an email code
-    api.authConfig().then((c) => setCfg(isDesktop() ? { ...c, google_client_id: null } : c)).catch(() => setCfg({ google_client_id: null, email_otp: true, password: true }));
+    // Google and GitHub only accept web origins they know; the desktop app (tauri://) signs in with an email code
+    api.authConfig().then((c) => setCfg(isDesktop() ? { ...c, google_client_id: null, github: false } : c)).catch(() => setCfg({ google_client_id: null, email_otp: true, password: true }));
   }, []);
   return cfg;
 }
@@ -136,7 +137,7 @@ declare global {
 }
 
 let gsiScript: Promise<void> | null = null;
-function loadGsi(): Promise<void> {
+export function loadGsi(): Promise<void> {
   if (window.google?.accounts?.id) return Promise.resolve();
   gsiScript ??= new Promise((resolve, reject) => {
     const s = document.createElement("script");
@@ -197,6 +198,29 @@ function GoogleButton({ clientId, mode, onBusy }: { clientId: string; mode: Mode
     return <p className="text-center text-xs text-muted-foreground">Google sign-in couldn&apos;t load. Use an email code instead.</p>;
   }
   return <div ref={ref} className="flex min-h-[44px] w-full justify-center" />;
+}
+
+/* ---------- GitHub ---------- */
+
+function GitHubButton({ mode, onBusy }: { mode: Mode; onBusy: (b: boolean) => void }) {
+  const [going, setGoing] = useState(false);
+  async function go() {
+    setGoing(true);
+    onBusy(true);
+    try {
+      await startGitHub(); // leaves the page for GitHub
+    } catch (err) {
+      toast.error(errorText(err, "GitHub sign-in is unavailable right now"));
+      setGoing(false);
+      onBusy(false);
+    }
+  }
+  return (
+    <Button variant="outline" size="lg" className="h-11 w-full" onClick={go} disabled={going}>
+      {going ? <Loader2 className="animate-spin" /> : <Github />}
+      {mode === "signup" ? "Sign up with GitHub" : "Continue with GitHub"}
+    </Button>
+  );
 }
 
 /* ---------- Email one-time code ---------- */
@@ -425,9 +449,12 @@ function AuthPage({ mode }: { mode: Mode }) {
           </p>
 
           <div className="mt-7 space-y-5">
-            {cfg?.google_client_id && (
+            {(cfg?.google_client_id || cfg?.github) && (
               <>
-                <GoogleButton clientId={cfg.google_client_id} mode={mode} onBusy={setBusy} />
+                <div className="space-y-2.5">
+                  {cfg.google_client_id && <GoogleButton clientId={cfg.google_client_id} mode={mode} onBusy={setBusy} />}
+                  {cfg.github && <GitHubButton mode={mode} onBusy={setBusy} />}
+                </div>
                 <div className="eyebrow flex items-center gap-3">
                   <span className="h-px flex-1 bg-border" />
                   or

@@ -35,6 +35,8 @@ class User(Base):
     is_active: Mapped[int] = mapped_column(default=1)
     email_verified: Mapped[int] = mapped_column(Integer, default=0)
     google_sub: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    github_id: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
+    github_login: Mapped[str | None] = mapped_column(String(64), nullable=True)  # refreshed each sign-in
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                                  server_default=func.now())
 
@@ -202,3 +204,20 @@ class IngestJob(Base):
     created_at: Mapped[float] = mapped_column(Float)
     updated_at: Mapped[float] = mapped_column(Float)
     finished_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class QuizAttempt(Base):
+    """One finished skill check on one repo: the score overall and per area of the code."""
+    __tablename__ = "quiz_attempts"
+    __table_args__ = (Index("ix_quiz_attempts_user_repo", "user_id", "repo_id"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    repo_id: Mapped[str] = mapped_column(ForeignKey("repos.id", ondelete="CASCADE"))
+    quiz_id: Mapped[str] = mapped_column(String(32))
+    correct: Mapped[int] = mapped_column(Integer, default=0)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    seconds: Mapped[float] = mapped_column(Float, default=0)
+    areas: Mapped[list] = mapped_column(JSON, default=list)  # [{key, name, correct, total}]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                 server_default=func.now())

@@ -62,6 +62,13 @@ class AskResponse(BaseModel):
     verify: VerifyReport
 
 
+class QuizSubmit(BaseModel):
+    repo_id: str
+    quiz_id: str = Field(max_length=32)
+    answers: List[Optional[int]] = Field(default_factory=list, max_length=40)
+    seconds: float = Field(default=0, ge=0, le=24 * 3600)
+
+
 class OverviewRequest(BaseModel):
     repo_id: str
     refresh: bool = False
@@ -165,6 +172,7 @@ class UserOut(BaseModel):
     email: str
     name: str
     created_at: str = ""
+    github_login: Optional[str] = None
 
 
 class OtpRequest(BaseModel):
@@ -181,6 +189,16 @@ class OtpVerify(BaseModel):
 
 class GoogleAuth(BaseModel):
     credential: str = Field(max_length=4096)  # Google Identity Services ID token
+
+
+class ProfileUpdate(BaseModel):
+    name: str = Field(max_length=120)
+
+
+class GitHubAuth(BaseModel):
+    code: str = Field(max_length=128)          # from GitHub's redirect back to the web app
+    state: str = Field(max_length=1024)        # what /api/auth/github/start issued
+    redirect_uri: str = Field(max_length=500)  # must match the one the authorize URL used
 
 
 class Token(BaseModel):

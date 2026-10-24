@@ -56,6 +56,16 @@ async function req<T>(path: string, opts: RequestInit = {}, auth = true): Promis
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
 /* ── types ── */
+export type Profile = {
+  id: string; name: string; email: string; email_verified: boolean; noreply_email: boolean; created_at: string;
+  sign_in: { password: boolean; email_code: boolean; google: boolean; github: string | null };
+  stats: { repos: number; files: number; quizzes: number; best_score: number | null; average_score: number | null };
+  today: { llm: number; llm_limit: number; ingest: number; ingest_limit: number };
+};
+export type GitHubRepo = {
+  full_name: string; name: string; description: string; url: string; language: string; stars: number;
+  fork: boolean; archived: boolean; pushed_at: string; size_kb: number; repo_id: string | null;
+};
 export type Citation = { file: string; start_line: number; end_line: number; snippet?: string };
 export type FileRef = { file: string; start_line: number; end_line: number };
 export type Mode = "llm" | "offline";
@@ -85,6 +95,53 @@ export type Overview = {
   stats: { files: number; chunks: number; imports: number; languages: string[] };
   citations: Citation[]; mode: Mode; model: string | null;
 };
+
+export type PipelineStage = {
+  id: string; name: string;
+  type: "input" | "llm" | "agent" | "tool" | "retriever" | "store" | "router" | "transform"
+    | "model" | "train" | "eval" | "queue" | "job" | "output";
+  description: string; cite: { file: string; start_line: number; end_line: number };
+  /** a sentence to say aloud while the stage runs (older cached machines have none) */
+  narration?: string;
+};
+export type Pipeline = {
+  found: boolean; kind: "agent" | "rag" | "ml" | "workflow" | "app"; title: string; summary: string; intro?: string;
+  stages: PipelineStage[]; links: { from: string; to: string; label: string; loop: boolean }[];
+  source: string | null; citations: Citation[]; dropped: string[]; mode: Mode; model: string | null;
+};
+
+export type CityBuilding = {
+  path: string; district: number; lines: number; defs: number;
+  /** commits in the timeline that touched it, the frame it first appears in, its last change (unix s) */
+  changes: number; born: number; last: number | null;
+};
+export type City = {
+  districts: { key: string; name: string; files: number; code: boolean }[];
+  buildings: CityBuilding[];
+  edges: [number, number][];
+  timeline: { t: number; sha: string; subject: string; changed: number[]; added: number[]; start?: boolean }[];
+  history: "full" | "recent" | "none";
+  stats: { files: number; drawn: number; commits: number; lines: number };
+};
+
+export type QuizQuestion = {
+  n: number; area: string; area_name: string; difficulty: "easy" | "medium" | "hard";
+  question: string; options: string[];
+};
+export type Quiz = {
+  id: string; mode: Mode; model: string | null; checked: boolean; minutes: number; created_at: number;
+  areas: { key: string; name: string }[]; questions: QuizQuestion[];
+};
+export type QuizArea = { key: string; name: string; correct: number; total: number };
+export type QuizResult = {
+  quiz_id: string; correct: number; total: number; percent: number; level: string; checked: boolean;
+  areas: QuizArea[]; weak: QuizArea[];
+  results: (QuizQuestion & {
+    chosen: number | null; answer: number; correct: boolean; explanation: string;
+    cite: { file: string; start_line: number; end_line: number };
+  })[];
+};
+export type QuizAttempt = { id: string; correct: number; total: number; seconds: number; areas: QuizArea[]; at: number };
 
 export type TourStep = {
   title: string; caption: string; explanation: string; file: string;
@@ -194,14 +251,24 @@ export const api = {
     req<{ access_token: string }>("/api/auth/register", post({ name, email, password }), false),
   login: (email: string, password: string) =>
     req<{ access_token: string }>("/api/auth/login", post({ email, password }), false),
-  me: () => req<{ id: string; email: string; name: string }>("/api/auth/me"),
+  me: () => req<{ id: string; email: string; name: string; github_login?: string | null }>("/api/auth/me"),
   authConfig: () =>
-    req<{ google_client_id: string | null; email_otp: boolean; password: boolean }>("/api/auth/config", {}, false),
+    req<{ google_client_id: string | null; github?: boolean; email_otp: boolean; password: boolean }>("/api/auth/config", {}, false),
   requestCode: (email: string, purpose: "login" | "signup", name = "") =>
     req<{ sent: boolean; expires_in: number; resend_in: number }>("/api/auth/otp/request", post({ email, purpose, name }), false),
   verifyCode: (email: string, code: string, purpose: "login" | "signup") =>
     req<{ access_token: string }>("/api/auth/otp/verify", post({ email, code, purpose }), false),
   google: (credential: string) => req<{ access_token: string }>("/api/auth/google", post({ credential }), false),
+  /** GitHub's authorize URL; `link` (signed in) connects GitHub to the current account instead. */
+  githubStart: (redirect_uri: string, link = false) =>
+    req<{ url: string; state: string }>(`/api/auth/github/start?${new URLSearchParams({ redirect_uri, link: String(link) })}`, {}, link),
+  github: (code: string, state: string, redirect_uri: string) =>
+    req<{ access_token: string }>("/api/auth/github", post({ code, state, redirect_uri }), false),
+  profile: () => req<Profile>("/api/profile"),
+  updateProfile: (name: string) => req<Profile>("/api/profile", post({ name })),
+  linkGoogle: (credential: string) => req<Profile>("/api/profile/google", post({ credential })),
+  unlink: (provider: "google" | "github") => req<Profile>(`/api/profile/${provider}`, { method: "DELETE" }),
+  githubRepos: (refresh = false) => req<{ login: string; repos: GitHubRepo[] }>(`/api/github/repos${refresh ? "?refresh=true" : ""}`),
 
   repos: () => req<{ repos: Repo[] }>("/api/repos"),
   deleteRepo: (repo_id: string) => req(`/api/repos/${repo_id}`, { method: "DELETE" }),
@@ -225,6 +292,13 @@ export const api = {
   ask: (repo_id: string, question: string, history: { role: string; text: string }[] = [], spoken = false) =>
     req<AskResponse>("/api/ask", post({ repo_id, question, history, spoken })),
   overview: (repo_id: string, refresh = false) => req<Overview>("/api/overview", post({ repo_id, refresh })),
+  pipeline: (repo_id: string, refresh = false) => req<Pipeline>("/api/pipeline", post({ repo_id, refresh })),
+  city: (repo_id: string, refresh = false) => req<City>("/api/city", post({ repo_id, refresh })),
+  quiz: (repo_id: string, refresh = false) => req<Quiz>("/api/quiz", post({ repo_id, refresh })),
+  submitQuiz: (repo_id: string, quiz_id: string, answers: (number | null)[], seconds: number) =>
+    req<QuizResult>("/api/quiz/submit", post({ repo_id, quiz_id, answers, seconds })),
+  quizAttempts: (repo_id: string) =>
+    req<{ attempts: QuizAttempt[] }>(`/api/quiz/attempts?repo_id=${encodeURIComponent(repo_id)}`),
   tour: (repo_id: string, flow: string) => req<Tour>("/api/tours", post({ repo_id, flow })),
   tasks: (repo_id: string, refresh = false) => req<Tasks>("/api/tasks", post({ repo_id, refresh })),
 

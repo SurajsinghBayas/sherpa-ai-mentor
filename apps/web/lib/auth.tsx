@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, tokenStore } from "../lib/api";
 
-type User = { id: string; email: string; name: string } | null;
+type User = { id: string; email: string; name: string; github_login?: string | null } | null;
 
 const Ctx = createContext<{
   user: User;

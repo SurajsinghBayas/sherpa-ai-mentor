@@ -50,7 +50,7 @@ def test_signup_then_login_with_email_code(client, outbox):
     login = client.post("/api/auth/otp/verify", json={"email": "ada@example.com", "code": _code(outbox), "purpose": "login"})
     assert login.status_code == 200
     pw = client.post("/api/auth/login", json={"email": "ada@example.com", "password": "whatever123"})
-    assert pw.status_code == 401 and "email code or Google" in pw.json()["detail"]
+    assert pw.status_code == 401 and "email code, Google or GitHub" in pw.json()["detail"]
 
 
 def test_email_code_limits(client, outbox):

@@ -21,20 +21,25 @@ from .agents.docs import (check_freshness, docs_markdown, generate_docs, get_doc
 from .agents.mentor import answer_question
 from .spoken import correct as correct_spoken, vocabulary as spoken_vocabulary
 from .agents.overview import build_overview
+from .agents.pipeline import build_pipeline
+from .agents.city import build_city
+from .agents.quiz import build_quiz, grade as grade_quiz
 from .agents.tasks import suggest_starter_tasks
 from .agents.tour import build_tour
 from . import private
 from .config import production_problems, production_warnings, settings
 from .db import engine as _engine, get_session, init_db
 from .guards import check_branch, check_outbound_url, enforce, normalize_repo_url
-from .dbmodels import CustomEndpoint, ProviderKey, Repo, RepoArtifact, UsageCounter
+from .dbmodels import CustomEndpoint, ProviderKey, QuizAttempt, Repo, RepoArtifact, UsageCounter
 from .embeddings import embedder
 from .ingest import (IngestError, chunk_sources, fetch_source, ingest_source, remote_head,
                      repo_id_for, snapshot_dir, _langs)
 from .llm import llm
 from .models import (AskRequest, DocsRequest, FreshnessRequest, IngestRequest,
-                     OverviewRequest, SyncRequest, TaskRequest, TourRequest)
+                     OverviewRequest, QuizSubmit, SyncRequest, TaskRequest, TourRequest)
 from .routers import auth as auth_router
+from .routers import github as github_router
+from .routers import profile as profile_router
 from .routers import keys as keys_router
 from .routers import study as study_router
 from .routers import uploads as uploads_router
@@ -91,6 +96,8 @@ app.add_middleware(
 )
 
 app.include_router(auth_router.router)
+app.include_router(github_router.router)
+app.include_router(profile_router.router)
 app.include_router(keys_router.router)
 app.include_router(study_router.router)
 app.include_router(uploads_router.router)
@@ -393,7 +400,7 @@ def _save_snapshot(repo_id: str, chunks, meta: dict, sources: dict, user,
     store.save(chunks, meta, sources)
     changes = _diff(old_hashes, store.meta["file_hashes"]) if old_hashes else {}
     if changes and any(changes.values()):
-        store.cache_clear("overview", "tasks")  # docs are kept: they track staleness per section
+        store.cache_clear("overview", "tasks", "pipeline", "city", "quiz")  # docs are kept: they track staleness per section
         log.info("ingest: %s changed — %d added, %d modified, %d removed", repo_id,
                  len(changes["added"]), len(changes["modified"]), len(changes["removed"]))
     _remember(store)
@@ -541,14 +548,14 @@ def _reindex(old: RepoStore, user, db: Session, full: bool) -> tuple[RepoStore, 
             raise HTTPException(400, "reindex failed: no readable source files found")
         store = RepoStore(old.repo_id, SqlBackend(old.repo_id, user.id))
         store.save(chunks, meta, sources)
-        store.cache_clear("overview", "tasks")  # a manual rebuild starts the analyses fresh
+        store.cache_clear("overview", "tasks", "pipeline", "city", "quiz")  # a manual rebuild starts the analyses fresh
         mode = "full"
     else:
         store = RepoStore(old.repo_id, SqlBackend(old.repo_id, user.id))
         new_chunks = chunk_sources(sources, only=set(changes["added"]) | set(changes["modified"]))
         store.apply_changes(sources, meta, changes, new_chunks)
         if any(changes.values()):
-            store.cache_clear("overview", "tasks")  # docs keep their per-section staleness
+            store.cache_clear("overview", "tasks", "pipeline", "city", "quiz")  # docs keep their per-section staleness
         mode = "incremental"
     _remember(store)
     n = sum(len(v) for v in changes.values())
@@ -692,6 +699,67 @@ def overview(req: OverviewRequest, request: Request, user=Depends(get_current_us
     if req.refresh or store.cache_get("overview") is None:
         _charge(db, user, "llm")
     return build_overview(store, override, refresh=req.refresh)
+
+
+@app.post("/api/pipeline")
+def pipeline(req: OverviewRequest, request: Request, user=Depends(get_current_user),
+             db: Session = Depends(get_session)):
+    """How the repo's agent loop, ML pipeline or workflow runs, stage by stage (drawn as a machine)."""
+    _check_rate(request, "pipeline", user)
+    store = get_store(req.repo_id, user, db)
+    override = _resolve_llm(req.key_id, req.endpoint_id, user, db)
+    if req.refresh or store.cache_get("pipeline") is None:
+        _charge(db, user, "llm")
+    return build_pipeline(store, override, refresh=req.refresh)
+
+
+@app.post("/api/city")
+def city(req: OverviewRequest, request: Request, user=Depends(get_current_user),
+         db: Session = Depends(get_session)):
+    """The codebase as a city (districts = components, buildings = files) and how it grew."""
+    _check_rate(request, "city", user)
+    store = get_store(req.repo_id, user, db)
+    return build_city(store, refresh=req.refresh)
+
+
+@app.post("/api/quiz")
+def quiz(req: OverviewRequest, request: Request, user=Depends(get_current_user),
+         db: Session = Depends(get_session)):
+    """The latest skill check for this repo, or new questions (`refresh`). Answers stay on the server."""
+    _check_rate(request, "quiz", user)
+    store = get_store(req.repo_id, user, db)
+    override = _resolve_llm(req.key_id, req.endpoint_id, user, db)
+    saved = store.cache_get("quiz") or {}
+    if req.refresh or saved.get("snapshot") != store.snapshot_hash or not saved.get("order"):
+        _charge(db, user, "llm")
+    return build_quiz(store, override, fresh=req.refresh)
+
+
+@app.post("/api/quiz/submit")
+def quiz_submit(req: QuizSubmit, request: Request, user=Depends(get_current_user),
+                db: Session = Depends(get_session)):
+    _check_rate(request, "quiz", user)
+    store = get_store(req.repo_id, user, db)
+    result = grade_quiz(store, req.quiz_id, req.answers)
+    if result is None:
+        raise HTTPException(409, "this quiz is out of date (the repo was re-indexed); start a new one")
+    row = QuizAttempt(user_id=user.id, repo_id=req.repo_id, quiz_id=req.quiz_id, correct=result["correct"],
+                      total=result["total"], seconds=req.seconds,
+                      areas=[{k: x[k] for k in ("key", "name", "correct", "total")} for x in result["areas"]])
+    db.add(row)
+    db.commit()
+    return result
+
+
+@app.get("/api/quiz/attempts")
+def quiz_attempts(repo_id: str, request: Request, user=Depends(get_current_user),
+                  db: Session = Depends(get_session)):
+    get_store(repo_id, user, db)  # the caller's own repo only
+    rows = db.query(QuizAttempt).filter(QuizAttempt.user_id == user.id, QuizAttempt.repo_id == repo_id) \
+        .order_by(QuizAttempt.created_at.desc()).limit(10).all()
+    return {"attempts": [{"id": r.id, "correct": r.correct, "total": r.total, "seconds": r.seconds,
+                          "areas": r.areas or [], "at": r.created_at.timestamp() if r.created_at else 0}
+                         for r in rows]}
 
 
 @app.post("/api/tours")

@@ -5,6 +5,9 @@
   are throttled per address.
 - Google: the browser gets an ID token from Google Identity Services; /google verifies
   its signature against Google's keys and audience (GOOGLE_CLIENT_ID).
+- GitHub: /github/start returns GitHub's authorize URL with a signed state; the web app's
+  callback page posts the code back to /github (see app/github.py). A signed-in user can
+  also link GitHub to their account, which lets Sherpa list their public repos.
 """
 import hashlib
 import hmac
@@ -17,14 +20,15 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from .. import github as gh
 from ..config import settings
 from ..db import get_session
 from ..dbmodels import EmailOtp, User
 from ..guards import enforce, ip_limit
 from ..mailer import MailError, mail_configured, otp_email, send_mail
-from ..models import GoogleAuth, LoginRequest, OtpRequest, OtpVerify, Token, UserCreate, UserOut
-from ..security import (create_access_token, get_current_user, hash_password,
-                        verify_password)
+from ..models import GitHubAuth, GoogleAuth, LoginRequest, OtpRequest, OtpVerify, Token, UserCreate, UserOut
+from ..security import (create_access_token, get_current_user, get_optional_user,
+                        hash_password, verify_password)
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -38,7 +42,7 @@ _google_keys = jwt.PyJWKClient("https://www.googleapis.com/oauth2/v3/certs", cac
 
 def _out(user: User) -> UserOut:
     return UserOut(id=user.id, email=user.email, name=user.name or "",
-                   created_at=str(user.created_at or ""))
+                   created_at=str(user.created_at or ""), github_login=user.github_login)
 
 
 # Per-IP limits on the unauthenticated routes: stop password guessing, account
@@ -66,7 +70,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_sessio
     user = db.query(User).filter(User.email == email).first()
     if user and not user.password_hash:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED,
-                            "this account signs in with an email code or Google")
+                            "this account signs in with an email code, Google or GitHub")
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "wrong email or password")
     if not user.is_active:
@@ -83,6 +87,7 @@ def me(user: User = Depends(get_current_user)):
 def auth_config():
     """Which sign-in methods this server offers (the web app hides the rest)."""
     return {"google_client_id": settings.google_client_id or None,
+            "github": gh.configured(),
             "email_otp": mail_configured() or not settings.is_production,
             "password": True}
 
@@ -217,6 +222,44 @@ def google(body: GoogleAuth, db: Session = Depends(get_session)):
             log.info("auth: new account via Google")
         user.google_sub = claims["sub"]  # link Google to an existing email account
     user.email_verified = 1
+    db.commit()
+    db.refresh(user)
+    return _session_for(user)
+
+
+@router.get("/github/start", dependencies=[Depends(ip_limit("auth-github-start", 20))])
+def github_start(redirect_uri: str, link: bool = False, user: User | None = Depends(get_optional_user)):
+    """GitHub's authorize URL. With link=true (signed in), the callback links GitHub to this account."""
+    if link and user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "sign in required")
+    return gh.start(redirect_uri, user.id if link else None)
+
+
+@router.post("/github", response_model=Token, dependencies=[Depends(ip_limit("auth-github", 20))])
+def github(body: GitHubAuth, db: Session = Depends(get_session)):
+    """Finish GitHub sign-in (or sign-up, or linking): same endpoint for all three."""
+    link_id = gh.check_state(body.state, body.redirect_uri)
+    p = gh.profile(body.code, body.redirect_uri)
+    owner = db.query(User).filter(User.github_id == p["id"]).first()
+    if link_id:
+        user = db.get(User, link_id)
+        if user is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "sign in again to connect GitHub")
+        if owner is not None and owner.id != user.id:
+            raise HTTPException(409, "this GitHub account is already connected to another Sherpa account")
+    else:
+        user = owner
+        if user is None and p["emails"]:  # link GitHub to an existing account with a verified email
+            user = db.query(User).filter(User.email.in_(p["emails"])).first()
+        if user is None:
+            email = p["emails"][0] if p["emails"] else f"{p['id']}+{p['login']}@users.noreply.github.com".lower()
+            user = User(email=email, name=p["name"][:120], password_hash="")
+            db.add(user)
+            log.info("auth: new account via GitHub")
+    user.github_id = p["id"]
+    user.github_login = p["login"]
+    if user.email in p["emails"]:
+        user.email_verified = 1
     db.commit()
     db.refresh(user)
     return _session_for(user)
