@@ -10,7 +10,7 @@ import { deleteChat, historySupported, listChats, saveChat, type Chat, type Stor
 import { CitationChip } from "../code-viewer";
 import { ListenButton } from "../listen-button";
 import { listen, recognitionSupported, say, stop } from "../../lib/voice";
-import { Markdown } from "../markdown";
+import { CommitChip, Markdown } from "../markdown";
 import { Sherpa, SherpaAvatar, SherpaSays } from "../sherpa";
 import { Button, Menu, Textarea } from "../ui/primitives";
 import { cn } from "../../lib/utils";
@@ -30,7 +30,8 @@ const uid = () => Math.random().toString(36).slice(2);
 
 function Sources({ meta, id, text }: { meta: AskResponse; id: string; text: string }) {
   const [open, setOpen] = useState(false);
-  if (!meta.citations.length) return <ListenButton id={id} text={text} className="mt-2" />;
+  const commits = meta.commits ?? [];
+  if (!meta.citations.length && !commits.length) return <ListenButton id={id} text={text} className="mt-2" />;
   return (
     <div className="mt-2 space-y-2">
       <div className="flex flex-wrap items-center gap-1.5">
@@ -50,6 +51,9 @@ function Sources({ meta, id, text }: { meta: AskResponse; id: string; text: stri
         <div className="flex flex-wrap gap-1">
           {meta.citations.map((c, i) => (
             <CitationChip key={i} file={c.file} start={c.start_line} end={c.end_line} />
+          ))}
+          {commits.map((c) => (
+            <CommitChip key={c.sha} sha={c.short} commit={c} />
           ))}
         </div>
       )}
@@ -80,7 +84,7 @@ function Bubble({ msg }: { msg: ChatMessage }) {
               {msg.text}
             </p>
           ) : (
-            <Markdown text={msg.text} />
+            <Markdown text={msg.text} commits={msg.meta?.commits} />
           )}
         </div>
         {msg.meta && <Sources meta={msg.meta} id={msg.id} text={msg.text} />}

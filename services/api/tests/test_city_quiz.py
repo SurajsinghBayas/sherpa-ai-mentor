@@ -38,7 +38,7 @@ def test_history_parse_oldest_first():
 
 
 def test_city_buildings_districts_and_timeline(monkeypatch):
-    monkeypatch.setattr(city_mod, "fetch_history", lambda meta: {"commits": history._parse(LOG), "truncated": False})
+    monkeypatch.setattr(history, "fetch_history", lambda meta: {"commits": history._parse(LOG), "truncated": False})
     c = city_mod.build_city(store())
     paths = [b["path"] for b in c["buildings"]]
     assert set(paths) == set(SRC)  # code files and docs/config
@@ -53,7 +53,7 @@ def test_city_buildings_districts_and_timeline(monkeypatch):
 
 
 def test_city_without_history(monkeypatch):
-    monkeypatch.setattr(city_mod, "fetch_history", lambda meta: None)
+    monkeypatch.setattr(history, "fetch_history", lambda meta: None)
     c = city_mod.build_city(store(rid="nohist"))
     assert c["timeline"] == [] and c["history"] == "none" and c["buildings"]
 

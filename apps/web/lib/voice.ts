@@ -53,6 +53,7 @@ export function speakable(md: string): string {
   return md
     .replace(/```[\s\S]*?```/g, " (code shown on screen) ")
     .replace(/\s*\[[^\[\]\s:]+?:L?\d+(?:\s*[-–]\s*L?\d+)?\](?!\()/g, "")
+    .replace(/\s*\[commit [0-9a-f]{6,40}\](?!\()/gi, "")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/`([^`]+)`/g, "$1")

@@ -7,9 +7,8 @@ last did, plus the commit-by-commit timeline the web app plays back. No language
 so the city is free and quick to build.
 """
 import logging
-import time
 
-from ..history import fetch_history
+from ..history import get_history
 from ..store import RepoStore
 from .overview import get_analysis
 from ..analysis import symbols_of
@@ -20,17 +19,6 @@ MAX_BUILDINGS = 600     # biggest files first; the rest are counted, not drawn
 MAX_TIMELINE = 400      # commits played back; older ones are merged into the first frame
 MAX_OTHER = 80          # docs and config files, drawn as low buildings in their own district
 OTHER = "(docs & config)"
-
-
-def _history(store: RepoStore, refresh: bool) -> dict | None:
-    """Commit history, cached per indexed commit (fetched again only when the repo moves on)."""
-    cached = store.cache_get("history")
-    commit = store.meta.get("commit") or store.snapshot_hash
-    if cached and cached.get("commit") == commit and not refresh:
-        return cached.get("history")
-    h = fetch_history(store.meta)
-    store.cache_put("history", {"commit": commit, "history": h, "fetched_at": time.time()})
-    return h
 
 
 def _district_names(store: RepoStore) -> dict[str, str]:
@@ -72,7 +60,7 @@ def build_city(store: RepoStore, refresh: bool = False) -> dict:
     edges = [list(x) for x in sorted({(index[e.src], index[e.dst]) for e in a.edges
                                       if e.src in index and e.dst in index and e.src != e.dst})]
 
-    history = _history(store, refresh)
+    history = get_history(store, refresh)
     timeline: list[dict] = []
     if history and history.get("commits"):
         commits = history["commits"]

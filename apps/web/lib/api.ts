@@ -78,8 +78,9 @@ export type Repo = {
 };
 export type Changes = { added?: string[]; modified?: string[]; removed?: string[] };
 
+export type CommitRef = { sha: string; short: string; t: number; author: string; subject: string; url: string };
 export type AskResponse = {
-  answer_markdown: string; citations: Citation[]; confidence: number; mode: Mode; model: string | null;
+  answer_markdown: string; citations: Citation[]; commits?: CommitRef[]; confidence: number; mode: Mode; model: string | null;
   verify: { grounded: boolean; verified: number; unchecked_claims: string[] };
 };
 
