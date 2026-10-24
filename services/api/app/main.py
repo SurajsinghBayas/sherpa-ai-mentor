@@ -94,6 +94,18 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
     max_age=600,
 )
+_refused_origins: set[str] = set()
+
+
+@app.middleware("http")
+async def log_refused_origin(request: Request, call_next):
+    # CORS refusals are silent on this side (the browser just blocks the response), so name the
+    # origin once: the fix is adding it to ALLOWED_ORIGINS.
+    origin = request.headers.get("origin")
+    if origin and origin not in ALLOWED_ORIGINS and origin not in _refused_origins and len(_refused_origins) < 50:
+        _refused_origins.add(origin)
+        log.warning("CORS: refused origin %s; add it to ALLOWED_ORIGINS if the web app runs there", origin[:200])
+    return await call_next(request)
 
 app.include_router(auth_router.router)
 app.include_router(github_router.router)

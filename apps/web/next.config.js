@@ -34,9 +34,8 @@ const securityHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
 ];
 
-if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL) {
-  console.warn("\n⚠ NEXT_PUBLIC_API_URL is not set: this build will call http://localhost:8000\n");
-}
+// The web app reads the API address at runtime from SHERPA_API_URL (see app/runtime-config.js);
+// without it, pages call port 8000 on their own host.
 
 // SHERPA_DESKTOP=1: a static export (out/) for the Tauri app in apps/desktop. Run it through
 // `npm run build:desktop`, which builds in a separate copy so a running `next dev` is never disturbed.

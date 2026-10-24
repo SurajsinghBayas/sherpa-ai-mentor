@@ -1,6 +1,24 @@
 // Typed API client — token in localStorage, JSON everywhere, honest errors.
 
-export const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+declare global {
+  interface Window {
+    __SHERPA_API__?: string; // set by /runtime-config.js from SHERPA_API_URL when the server starts
+  }
+}
+
+/** Where the API lives. The runtime value wins, so a deploy only needs a restart, not a rebuild;
+ * NEXT_PUBLIC_API_URL is the build-time fallback (the desktop app uses it). */
+function apiBase(): string {
+  const runtime = typeof window !== "undefined" ? window.__SHERPA_API__ : process.env.SHERPA_API_URL;
+  if (runtime) return runtime;
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== "undefined" && process.env.NODE_ENV === "production") {
+    return `${window.location.protocol}//${window.location.hostname}:8000`; // the API beside the web server
+  }
+  return "http://localhost:8000";
+}
+
+export const API = apiBase().replace(/\/+$/, "");
 const TOKEN_KEY = "sherpa.jwt";
 
 export const tokenStore = {

@@ -33,6 +33,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
         <link rel="preload" as="image" href="/mascot/head.svg" />
+        {/* must run before the app's scripts read the API address */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="/runtime-config.js" />
       </head>
       <body className="min-h-dvh bg-background font-sans">
         <Providers>

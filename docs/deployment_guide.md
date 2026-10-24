@@ -56,11 +56,13 @@ Skip this if the web app is hosted elsewhere, such as Vercel. Otherwise:
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs
 cd ~/sherpa-ai-mentor/apps/web
 npm install
-NEXT_PUBLIC_API_URL=http://YOUR_SERVER_IP:8000 npm run build
-nohup npm start -- -H 0.0.0.0 -p 3000 > ~/sherpa-web.log 2>&1 &
+npm run build
+SHERPA_API_URL=http://YOUR_SERVER_IP:8000 nohup npm start -- -H 0.0.0.0 -p 3000 > ~/sherpa-web.log 2>&1 &
 ```
 
 Open port **3000** in the security group, then visit `http://YOUR_SERVER_IP:3000`.
+
+`SHERPA_API_URL` is read when the web server starts, so changing it needs a restart, not a rebuild. Without it, the page calls port 8000 on its own host. The API must also list the web app's address in `ALLOWED_ORIGINS` in `.env` (for example `ALLOWED_ORIGINS=http://YOUR_SERVER_IP:3000`), or the browser blocks every call and the sign-in page shows "Sign-in options couldn't load". The API log names any origin it refused (`CORS: refused origin …`).
 
 ## Everyday commands
 
@@ -73,7 +75,7 @@ Open port **3000** in the security group, then visit `http://YOUR_SERVER_IP:3000
 
 ## Good to know
 
-- **HTTPS:** browsers only allow the microphone (voice mode) on HTTPS pages. Over plain `http://IP`, everything else works. For HTTPS, put the server behind a domain with a certificate, then set `ENVIRONMENT=production` and use `https://` addresses in `ALLOWED_ORIGINS` and `NEXT_PUBLIC_API_URL`.
+- **HTTPS:** browsers only allow the microphone (voice mode) on HTTPS pages. Over plain `http://IP`, everything else works. For HTTPS, put the server behind a domain with a certificate, then set `ENVIRONMENT=production` and use `https://` addresses in `ALLOWED_ORIGINS` and `SHERPA_API_URL`.
 - **Memory:** building the frontend needs about 2 GB of RAM, so use at least a `t3.small`, preferably a `t3.medium`.
 - **Token:** the token you clone with is saved in `.git/config` on the server, which is what lets `git pull` work. Don't use it anywhere else, and never commit it.
 - **Database:** to use Amazon RDS, put its `DATABASE_URL` in `.env` and allow port 5432 from this server in the RDS security group. See [`rds_setup.md`](rds_setup.md).

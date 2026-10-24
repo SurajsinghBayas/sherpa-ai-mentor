@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { OTPInput, REGEXP_ONLY_DIGITS } from "input-otp";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Github, Loader2, Mail } from "lucide-react";
-import { api, ApiError } from "../lib/api";
+import { API, api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { isDesktop } from "../lib/desktop";
 import { startGitHub } from "../lib/github-auth";
@@ -35,11 +35,20 @@ function useFinish() {
 
 function useAuthConfig() {
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    setError(null);
     // Google and GitHub only accept web origins they know; the desktop app (tauri://) signs in with an email code
-    api.authConfig().then((c) => setCfg(isDesktop() ? { ...c, google_client_id: null, github: false } : c)).catch(() => setCfg({ google_client_id: null, email_otp: true, password: true }));
-  }, []);
-  return cfg;
+    api
+      .authConfig()
+      .then((c) => setCfg(isDesktop() ? { ...c, google_client_id: null, github: false } : c))
+      .catch((e) => {
+        setCfg({ google_client_id: null, email_otp: true, password: true });
+        setError(e instanceof ApiError ? e.message : `Can't reach the Sherpa API at ${API}`);
+      });
+  }, [attempt]);
+  return { cfg, error, retry: () => setAttempt((n) => n + 1) };
 }
 
 function Working({ children }: { children: React.ReactNode }) {
@@ -429,7 +438,7 @@ function PasswordForm({ mode, onBusy }: { mode: Mode; onBusy: (b: boolean) => vo
 /* ---------- Pages ---------- */
 
 function AuthPage({ mode }: { mode: Mode }) {
-  const cfg = useAuthConfig();
+  const { cfg, error: cfgError, retry } = useAuthConfig();
   const [busy, setBusy] = useState(false);
   const [method, setMethod] = useState<"code" | "password">("code");
   const signup = mode === "signup";
@@ -449,6 +458,17 @@ function AuthPage({ mode }: { mode: Mode }) {
           </p>
 
           <div className="mt-7 space-y-5">
+            {cfgError && (
+              <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-xs">
+                <p className="font-medium text-destructive">Sign-in options couldn&apos;t load</p>
+                <p className="mt-1 break-words text-muted-foreground">
+                  {cfgError} Google and GitHub sign-in appear once the API answers.
+                </p>
+                <button type="button" onClick={retry} className="mt-1.5 font-medium text-foreground underline underline-offset-2">
+                  Try again
+                </button>
+              </div>
+            )}
             {(cfg?.google_client_id || cfg?.github) && (
               <>
                 <div className="space-y-2.5">
