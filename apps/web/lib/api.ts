@@ -151,6 +151,30 @@ export type CityBuilding = {
   /** commits in the timeline that touched it, the frame it first appears in, its last change (unix s) */
   changes: number; born: number; last: number | null;
 };
+export type StackItem = {
+  name: string;
+  package: string; // as declared in the manifest ("" for configs like Dockerfiles)
+  category: string;
+  version: string;
+  dev: boolean; // only in dev/test dependencies
+  detail?: string;
+  also?: string[]; // other packages folded into this entry (e.g. @radix-ui/*)
+  cite: FileRef;
+};
+export type StackGroup = {
+  path: string; // workspace directory; "" = repo root, "*" = repo-wide infrastructure
+  name: string;
+  manifests: string[];
+  count: number;
+  categories: { id: string; label: string; items: StackItem[] }[];
+};
+export type Stack = {
+  repo: string;
+  languages: { name: string; files: number; share: number }[];
+  groups: StackGroup[];
+  technologies: number;
+};
+
 export type City = {
   districts: { key: string; name: string; files: number; code: boolean }[];
   buildings: CityBuilding[];
@@ -330,6 +354,7 @@ export const api = {
   overview: (repo_id: string, refresh = false) => req<Overview>("/api/overview", post({ repo_id, refresh })),
   pipeline: (repo_id: string, refresh = false) => req<Pipeline>("/api/pipeline", post({ repo_id, refresh })),
   city: (repo_id: string, refresh = false) => req<City>("/api/city", post({ repo_id, refresh })),
+  stack: (repo_id: string, refresh = false) => req<Stack>("/api/stack", post({ repo_id, refresh })),
   quiz: (repo_id: string, refresh = false) => req<Quiz>("/api/quiz", post({ repo_id, refresh })),
   submitQuiz: (repo_id: string, quiz_id: string, answers: (number | null)[], seconds: number) =>
     req<QuizResult>("/api/quiz/submit", post({ repo_id, quiz_id, answers, seconds })),

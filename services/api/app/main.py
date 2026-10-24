@@ -24,6 +24,7 @@ from .agents.overview import build_overview
 from .agents.pipeline import build_pipeline
 from .agents.city import build_city
 from .agents.quiz import build_quiz, grade as grade_quiz
+from .agents.stack import build_stack
 from .agents.tasks import suggest_starter_tasks
 from .agents.tour import build_tour
 from . import private
@@ -412,7 +413,7 @@ def _save_snapshot(repo_id: str, chunks, meta: dict, sources: dict, user,
     store.save(chunks, meta, sources)
     changes = _diff(old_hashes, store.meta["file_hashes"]) if old_hashes else {}
     if changes and any(changes.values()):
-        store.cache_clear("overview", "tasks", "pipeline", "city", "quiz")  # docs are kept: they track staleness per section
+        store.cache_clear("overview", "tasks", "pipeline", "city", "quiz", "stack")  # docs are kept: they track staleness per section
         log.info("ingest: %s changed — %d added, %d modified, %d removed", repo_id,
                  len(changes["added"]), len(changes["modified"]), len(changes["removed"]))
     _remember(store)
@@ -560,14 +561,14 @@ def _reindex(old: RepoStore, user, db: Session, full: bool) -> tuple[RepoStore, 
             raise HTTPException(400, "reindex failed: no readable source files found")
         store = RepoStore(old.repo_id, SqlBackend(old.repo_id, user.id))
         store.save(chunks, meta, sources)
-        store.cache_clear("overview", "tasks", "pipeline", "city", "quiz")  # a manual rebuild starts the analyses fresh
+        store.cache_clear("overview", "tasks", "pipeline", "city", "quiz", "stack")  # a manual rebuild starts the analyses fresh
         mode = "full"
     else:
         store = RepoStore(old.repo_id, SqlBackend(old.repo_id, user.id))
         new_chunks = chunk_sources(sources, only=set(changes["added"]) | set(changes["modified"]))
         store.apply_changes(sources, meta, changes, new_chunks)
         if any(changes.values()):
-            store.cache_clear("overview", "tasks", "pipeline", "city", "quiz")  # docs keep their per-section staleness
+            store.cache_clear("overview", "tasks", "pipeline", "city", "quiz", "stack")  # docs keep their per-section staleness
         mode = "incremental"
     _remember(store)
     n = sum(len(v) for v in changes.values())
@@ -732,6 +733,15 @@ def city(req: OverviewRequest, request: Request, user=Depends(get_current_user),
     _check_rate(request, "city", user)
     store = get_store(req.repo_id, user, db)
     return build_city(store, refresh=req.refresh)
+
+
+@app.post("/api/stack")
+def stack(req: OverviewRequest, request: Request, user=Depends(get_current_user),
+          db: Session = Depends(get_session)):
+    """The tech stack as a tree: workspaces → categories → technologies, each citing its manifest line."""
+    _check_rate(request, "stack", user)
+    store = get_store(req.repo_id, user, db)
+    return build_stack(store, refresh=req.refresh)
 
 
 @app.post("/api/quiz")

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import {
   AlertCircle, BookOpen, Building2, CheckCircle2, ChevronsUpDown, Command as CommandIcon, Ellipsis, FolderGit2, ListTodo,
-  Cog, GraduationCap, Lock, Map, MessageSquare, Moon, Plus, RefreshCw, Route, Search, Trash2, Upload,
+  Cog, GraduationCap, Layers, Lock, Map, MessageSquare, Moon, Plus, RefreshCw, Route, Search, Trash2, Upload,
 } from "lucide-react";
 import { api, ApiError, type Health, type Repo } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -22,14 +22,16 @@ import { DocsPanel } from "./workspace/docs-panel";
 import { MachinePanel } from "./workspace/machine-panel";
 import { OverviewPanel } from "./workspace/overview-panel";
 import { QuizPanel } from "./workspace/quiz-panel";
+import { StackPanel } from "./workspace/stack-panel";
 import { Dots, timeAgo, timeLeft } from "./workspace/shared";
 import { TasksPanel } from "./workspace/tasks-panel";
 import { TourPanel } from "./workspace/tour-panel";
 
-type TabId = "ask" | "overview" | "machine" | "city" | "tour" | "tasks" | "docs" | "quiz";
+type TabId = "ask" | "overview" | "stack" | "machine" | "city" | "tour" | "tasks" | "docs" | "quiz";
 
 const NAV: { id: TabId; icon: typeof Map; label: string; short: string; hint: string }[] = [
   { id: "overview", icon: Map, label: "Architecture", short: "Map", hint: "Main parts and how they connect" },
+  { id: "stack", icon: Layers, label: "Tech stack", short: "Stack", hint: "What it's built with, as a tree" },
   { id: "machine", icon: Cog, label: "Pipeline machine", short: "Machine", hint: "How the agent, ML or workflow runs" },
   { id: "city", icon: Building2, label: "Repo city", short: "City", hint: "Every file, and how it grew" },
   { id: "ask", icon: MessageSquare, label: "Ask Sherpa", short: "Ask", hint: "How and why, with sources" },
@@ -574,9 +576,12 @@ export function Dashboard() {
 
           {/* every panel stays mounted so results survive tab switches; keyed by repo so they reset on switch,
               and the map and tasks also reload when the index changes (the chat and tours keep their history) */}
-          {(["overview", "machine", "city", "ask", "tour", "tasks", "docs", "quiz"] as TabId[]).map((id) => (
-            <div key={`${id}-${repoId}${["overview", "machine", "city", "tasks", "quiz"].includes(id) ? `-${indexRev}` : ""}`} className={cn("flex min-h-0 flex-1 flex-col", (tab !== id || adding) && "hidden")}>
+          {(["overview", "stack", "machine", "city", "ask", "tour", "tasks", "docs", "quiz"] as TabId[]).map((id) => (
+            <div key={`${id}-${repoId}${["overview", "stack", "machine", "city", "tasks", "quiz"].includes(id) ? `-${indexRev}` : ""}`} className={cn("flex min-h-0 flex-1 flex-col", (tab !== id || adding) && "hidden")}>
               {id === "ask" && <AskPanel repoId={repoId} repoName={current?.name || ""} seed={askSeed} onSeedUsed={clearAsk} />}
+              {id === "stack" && (
+                <StackPanel repoId={repoId} active={tab === "stack" && !adding} busy={busy} setBusy={setBusy} onAsk={askAbout} />
+              )}
               {id === "city" && <CityPanel repoId={repoId} busy={busy} setBusy={setBusy} onAsk={askAbout} />}
               {id === "quiz" && <QuizPanel repoId={repoId} busy={busy} setBusy={setBusy} onAsk={askAbout} onTour={tourFlow} />}
               {id === "machine" && <MachinePanel repoId={repoId} busy={busy} setBusy={setBusy} onAsk={askAbout} />}
