@@ -26,3 +26,10 @@ apps/web/out-desktop/
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 apps/web/.desktop-build/
+apps/web/out-mobile/
+apps/web/.mobile-build/
+apps/mobile/android/app/build/
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+apps/mobile/ios/App/Pods/
+apps/mobile/ios/App/build/

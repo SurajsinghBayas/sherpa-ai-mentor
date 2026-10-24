@@ -1,0 +1,23 @@
+{
+  "name": "sherpa-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sherpa AI for Android and iOS (Capacitor 8) wrapping the web app in apps/web",
+  "scripts": {
+    "web": "SHERPA_API_URL=${SHERPA_API_URL:-https://sherpa-ai.tech} node ../web/scripts/build-desktop.mjs mobile",
+    "sync": "npm run web && cap sync",
+    "android": "npm run sync && cap run android",
+    "android:apk": "npm run sync && cd android && ./gradlew assembleDebug",
+    "ios": "npm run sync && cap open ios",
+    "icons": "python3 scripts/icons.py"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.1",
+    "@capacitor/core": "8.5.1",
+    "@capacitor/ios": "8.5.1",
+    "@capacitor/splash-screen": "8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.1"
+  }
+}

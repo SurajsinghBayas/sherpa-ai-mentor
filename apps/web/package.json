@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",
+    "@capacitor/core": "8.5.1",
     "@number-flow/react": "0.6.2",
     "@ricky0123/vad-web": "0.0.30",
     "@tauri-apps/plugin-opener": "2.7.0",

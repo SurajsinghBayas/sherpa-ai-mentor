@@ -242,9 +242,11 @@ def test_cli_is_served_preset_to_this_server(client):
             assert a.read() == b.read(), "bundled CLI is out of date: run `make cli-sync`"
 
 
-def test_desktop_app_origin_allowed(client):
-    """The Tauri app (tauri://localhost) can call the API; an unknown origin can't."""
-    ok = client.options("/api/health", headers={"Origin": "tauri://localhost", "Access-Control-Request-Method": "GET"})
-    assert ok.headers.get("access-control-allow-origin") == "tauri://localhost"
+def test_app_origins_allowed(client):
+    """The desktop (tauri://) and mobile (Android http://localhost, iOS capacitor://) apps can call
+    the API; an unknown origin can't."""
+    for origin in ("tauri://localhost", "http://localhost", "capacitor://localhost"):
+        ok = client.options("/api/health", headers={"Origin": origin, "Access-Control-Request-Method": "GET"})
+        assert ok.headers.get("access-control-allow-origin") == origin
     bad = client.options("/api/health", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
     assert "access-control-allow-origin" not in bad.headers

@@ -4,7 +4,7 @@ import { buttonVariants } from "../components/ui/button-variants";
 
 export default function NotFound() {
   return (
-    <main className="container flex min-h-[calc(100dvh-3.5rem)] flex-col items-center justify-center py-16 text-center">
+    <main className="container flex min-h-[calc(100dvh_-_var(--header-h))] flex-col items-center justify-center py-16 text-center">
       <Sherpa pose="exploring" size={128} />
       <p className="eyebrow mt-6">404</p>
       <h1 className="mt-2 text-3xl font-semibold">This path isn&apos;t on the map</h1>

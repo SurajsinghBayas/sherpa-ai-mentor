@@ -1,0 +1,26 @@
+{
+  "appId": "ai.sherpa.mobile",
+  "appName": "Sherpa AI",
+  "webDir": "../web/out-mobile",
+  "server": {
+    "androidScheme": "http"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 500,
+      "launchAutoHide": true,
+      "backgroundColor": "#F8F5F0",
+      "showSpinner": false
+    },
+    "SystemBars": {
+      "insetsHandling": "css"
+    }
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#F8F5F0"
+  },
+  "android": {
+    "backgroundColor": "#F8F5F0"
+  }
+}

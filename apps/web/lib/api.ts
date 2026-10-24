@@ -1,5 +1,7 @@
 // Typed API client — token in localStorage, JSON everywhere, honest errors.
 
+import { isMobileApp } from "./desktop";
+
 declare global {
   interface Window {
     __SHERPA_API__?: string; // set by /runtime-config.js from SHERPA_API_URL when the server starts
@@ -35,6 +37,12 @@ export class ApiError extends Error {
   }
 }
 
+/** Full page load of the sign-in page. The mobile apps serve their start page for any path, so they
+ * reload at "/" and the app routes a signed-out user to sign-in from there. */
+function signInAgain() {
+  window.location.assign(isMobileApp() ? "/" : "/login");
+}
+
 async function raw(path: string, opts: RequestInit = {}, auth = true): Promise<Response> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (auth) {
@@ -50,7 +58,7 @@ async function raw(path: string, opts: RequestInit = {}, auth = true): Promise<R
   if (r.status === 401 && auth && tokenStore.get() && typeof window !== "undefined") {
     // expired or revoked session: drop the token and send the user to sign in again
     tokenStore.clear();
-    window.location.assign("/login");
+    signInAgain();
   }
   if (!r.ok) {
     let detail = `${r.status}`;
@@ -234,7 +242,7 @@ function uploadZip(zip: Blob, filename: string, name: string, origin: "zip" | "f
       if (xhr.status >= 200 && xhr.status < 300) return resolve(body as UploadJob);
       if (xhr.status === 401 && typeof window !== "undefined") {
         tokenStore.clear();
-        window.location.assign("/login");
+        signInAgain();
       }
       reject(new ApiError(xhr.status, typeof body?.detail === "string" ? body.detail : `upload failed (${xhr.status})`));
     };

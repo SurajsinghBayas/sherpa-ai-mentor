@@ -16,6 +16,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  viewportFit: "cover", // lets the header paint under the phone's status bar; --safe-top keeps it clear
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#F8F5F0" },
     { media: "(prefers-color-scheme: dark)", color: "#121316" },

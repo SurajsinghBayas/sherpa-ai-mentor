@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Github, Loader2, RotateCcw, Search, Star } from "lucide-react";
 import { api, ApiError, type GitHubRepo } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { isDesktop } from "../lib/desktop";
+import { isNativeApp } from "../lib/desktop";
 import { startGitHub } from "../lib/github-auth";
 import { Badge, Button, Input } from "./ui/primitives";
 
@@ -39,7 +39,7 @@ export function GitHubRepos({
   const [q, setQ] = useState("");
 
   useEffect(() => {
-    if (isDesktop()) return; // GitHub only sends people back to web origins
+    if (isNativeApp()) return; // GitHub only sends people back to web origins
     api.authConfig().then((c) => setEnabled(!!c.github)).catch(() => {});
   }, []);
 

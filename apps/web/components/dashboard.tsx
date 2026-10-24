@@ -429,7 +429,7 @@ export function Dashboard() {
 
   if (loading || !user) {
     return (
-      <main className="flex h-[calc(100dvh-3.5rem)] items-center justify-center">
+      <main className="flex h-[calc(100dvh_-_var(--header-h))] items-center justify-center">
         <div className="flex flex-col items-center gap-3" role="status">
           <Sherpa pose="walking" size={80} decorative />
           <p className="text-sm text-muted-foreground">Loading your workspace…</p>
@@ -473,7 +473,7 @@ export function Dashboard() {
 
   return (
     <CodeViewerProvider repoId={repoId}>
-      <div className="flex h-[calc(100dvh-3.5rem)]">
+      <div className="flex h-[calc(100dvh_-_var(--header-h))]">
         <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card sm:flex">
           <div className="p-3">
             <RepoSwitcher repos={repos} current={current} onSelect={select} onAdd={() => setAdding(true)} />

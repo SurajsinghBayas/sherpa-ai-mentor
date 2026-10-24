@@ -35,7 +35,7 @@ export default function GitHubCallbackPage() {
   }, [router, signIn]);
 
   return (
-    <main className="grid min-h-[calc(100dvh-3.5rem)] place-items-center px-4">
+    <main className="grid min-h-[calc(100dvh_-_var(--header-h))] place-items-center px-4">
       <div className="flex max-w-sm flex-col items-center gap-4 text-center">
         <Sherpa pose={error ? "guide" : "thinking"} size={96} decorative />
         {error ? (

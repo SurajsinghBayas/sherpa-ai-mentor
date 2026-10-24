@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { Check, FolderGit2, Github, GraduationCap, KeyRound, Loader2, LogOut, Mail, Pencil, Trophy, X, FileCode2 } from "lucide-react";
 import { api, ApiError, tokenStore, type Profile as ProfileData } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { isDesktop } from "../lib/desktop";
+import { isNativeApp } from "../lib/desktop";
 import { startGitHub } from "../lib/github-auth";
 import { loadGsi } from "./auth-forms";
 import { Badge, Button, ConfirmDialog, Input } from "./ui/primitives";
@@ -129,12 +129,12 @@ export function Profile() {
   useEffect(() => {
     if (!user) return;
     api.profile().then(setP).catch((e) => toast.error(errorText(e, "Couldn't load your profile")));
-    api.authConfig().then((c) => setCfg(isDesktop() ? { google_client_id: null, github: false } : c)).catch(() => setCfg({ google_client_id: null }));
+    api.authConfig().then((c) => setCfg(isNativeApp() ? { google_client_id: null, github: false } : c)).catch(() => setCfg({ google_client_id: null }));
   }, [user]);
 
   if (!p) {
     return (
-      <main className="container flex h-[calc(100vh-3.5rem)] items-center justify-center">
+      <main className="container flex h-[calc(100vh_-_var(--header-h))] items-center justify-center">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
       </main>
     );

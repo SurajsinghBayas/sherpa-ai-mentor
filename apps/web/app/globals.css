@@ -6,6 +6,10 @@
    Light: warm paper + navy ink + Sherpa blue. Dark: the navy card from the logo sheet. */
 @layer base {
   :root {
+    /* safe areas: the Android app injects --safe-area-inset-*, iOS and phone browsers use env() */
+    --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+    --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+    --header-h: calc(3.5rem + var(--safe-top));
     --background: 40 33% 96%;        /* #F8F5F0 paper */
     --foreground: 223 45% 16%;       /* #17223D navy */
     --card: 0 0% 100%;
@@ -162,7 +166,8 @@
   }
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
-  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pb-safe { padding-bottom: var(--safe-bottom); }
+  .pt-safe { padding-top: var(--safe-top); }
 }
 
 /* shiki tokens carry both theme colours; pick one by the active theme */

@@ -97,7 +97,7 @@ export function Settings() {
 
   if (loading || !user) {
     return (
-      <main className="container flex h-[calc(100vh-3.5rem)] items-center justify-center">
+      <main className="container flex h-[calc(100vh_-_var(--header-h))] items-center justify-center">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
       </main>
     );

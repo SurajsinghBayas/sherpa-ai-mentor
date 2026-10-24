@@ -64,6 +64,50 @@ Open port **3000** in the security group, then visit `http://YOUR_SERVER_IP:3000
 
 `SHERPA_API_URL` is read when the web server starts, so changing it needs a restart, not a rebuild. Without it, the page calls port 8000 on its own host. The API must also list the web app's address in `ALLOWED_ORIGINS` in `.env` (for example `ALLOWED_ORIGINS=http://YOUR_SERVER_IP:3000`), or the browser blocks every call and the sign-in page shows "Sign-in options couldn't load". The API log names any origin it refused (`CORS: refused origin …`).
 
+## 6. Serve it on a domain with HTTPS
+
+A page loaded over `https://` can't call an `http://` API: the browser blocks it as mixed content,
+and the sign-in page shows "Can't reach the Sherpa API". So serve the API through the same
+domain. nginx terminates HTTPS and passes `/api` to the API and everything else to the web app.
+In the site's `server { listen 443 ssl; … }` block (certbot sets up the certificate):
+
+```nginx
+client_max_body_size 110m;              # ZIP uploads (MAX_UPLOAD_MB is 100)
+
+location /api/ {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;   # rate limits per real client
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;                         # voice mode's WebSocket
+    proxy_set_header Connection $connection_upgrade;
+    proxy_read_timeout 300s;                                        # long indexing and answers
+    proxy_buffering off;
+}
+location = /cli/sherpa.py { proxy_pass http://127.0.0.1:8000; }
+
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+`$connection_upgrade` needs this once in the `http { }` block, for example in
+`/etc/nginx/conf.d/upgrade.conf`:
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+```
+
+Then:
+- Set `ALLOWED_ORIGINS=https://your-domain,https://www.your-domain` in `.env`.
+- Start the web server with `SHERPA_API_URL=https://your-domain`.
+- Close ports 3000 and 8000 in the security group. Only 80 and 443 need to be open.
+
 ## Everyday commands
 
 | To | Run |

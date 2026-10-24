@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Toaster } from "sonner";
 import { AuthProvider } from "../lib/auth";
-import { isDesktop } from "../lib/desktop";
+import { isDesktop, isMobileApp, isNativeApp } from "../lib/desktop";
 import { TooltipProvider } from "./ui/primitives";
 
 function ThemedToaster() {
@@ -25,15 +25,26 @@ function ThemedToaster() {
   );
 }
 
-/** Desktop app only: the marketing page goes straight to the workspace, and links to other sites open
- *  in the default browser instead of replacing the app's window. */
-function DesktopShell() {
+/** Desktop and mobile apps: the marketing page goes straight to the workspace. On desktop, links to
+ *  other sites open in the default browser (the mobile shells already do that); on phones, the status
+ *  bar icons follow the theme. */
+function AppShell() {
   const path = usePathname();
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
-    if (isDesktop() && path === "/") router.replace("/dashboard");
+    if (isNativeApp() && path === "/") router.replace("/dashboard");
   }, [path, router]);
+
+  useEffect(() => {
+    if (!isMobileApp()) return;
+    import("@capacitor/core")
+      .then(({ SystemBars, SystemBarsStyle }) =>
+        SystemBars.setStyle({ style: resolvedTheme === "dark" ? SystemBarsStyle.Dark : SystemBarsStyle.Light }),
+      )
+      .catch(() => {});
+  }, [resolvedTheme]);
 
   useEffect(() => {
     if (!isDesktop()) return;
@@ -55,7 +66,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
       <TooltipProvider delay={400}>
         <AuthProvider>
-          <DesktopShell />
+          <AppShell />
           {children}
           <ThemedToaster />
         </AuthProvider>

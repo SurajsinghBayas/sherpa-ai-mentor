@@ -9,7 +9,7 @@ import { OTPInput, REGEXP_ONLY_DIGITS } from "input-otp";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Github, Loader2, Mail } from "lucide-react";
 import { API, api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { isDesktop } from "../lib/desktop";
+import { isNativeApp } from "../lib/desktop";
 import { startGitHub } from "../lib/github-auth";
 import { cn } from "../lib/utils";
 import { Button, Input, Label } from "./ui/primitives";
@@ -39,10 +39,10 @@ function useAuthConfig() {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     setError(null);
-    // Google and GitHub only accept web origins they know; the desktop app (tauri://) signs in with an email code
+    // Google and GitHub only accept web origins they know; the desktop and mobile apps sign in with an email code
     api
       .authConfig()
-      .then((c) => setCfg(isDesktop() ? { ...c, google_client_id: null, github: false } : c))
+      .then((c) => setCfg(isNativeApp() ? { ...c, google_client_id: null, github: false } : c))
       .catch((e) => {
         setCfg({ google_client_id: null, email_otp: true, password: true });
         setError(e instanceof ApiError ? e.message : `Can't reach the Sherpa API at ${API}`);
@@ -445,7 +445,7 @@ function AuthPage({ mode }: { mode: Mode }) {
   const pose: Pose = busy ? "thinking" : signup ? "excited" : "happy";
 
   return (
-    <main className="grid min-h-[calc(100dvh-3.5rem)] lg:grid-cols-[1fr_minmax(0,34rem)]">
+    <main className="grid min-h-[calc(100dvh_-_var(--header-h))] lg:grid-cols-[1fr_minmax(0,34rem)]">
       <section className="flex items-center justify-center px-4 py-10 sm:px-8">
         <div className="w-full max-w-sm animate-enter-up">
           <div className="mb-6 flex items-center gap-3 lg:hidden">

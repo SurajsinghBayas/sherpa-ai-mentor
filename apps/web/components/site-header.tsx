@@ -42,7 +42,7 @@ export function SiteHeader() {
   const router = useRouter();
 
   return (
-    <header className="sticky top-0 z-header w-full border-b border-border bg-background">
+    <header className="pt-safe sticky top-0 z-header w-full border-b border-border bg-background">
       <div className={cn("flex h-14 items-center gap-3 px-4", path === "/dashboard" ? "" : "container")}>
         <Link href="/" aria-label="Sherpa AI home" className="rounded-md transition-opacity hover:opacity-80">
           <Wordmark />

@@ -125,9 +125,12 @@ class Settings(BaseSettings):
 
     # CORS — comma-separated allowed origins; "*" allows all (dev only)
     allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
-    # The desktop app's own origins (Tauri 2): tauri://localhost on macOS/Linux, http(s)://tauri.localhost
-    # on Windows. Browsers can't send these, so they are allowed alongside the https-only web origins.
-    desktop_origins: str = "tauri://localhost,http://tauri.localhost,https://tauri.localhost"
+    # The apps' own origins, allowed alongside the https-only web origins. Desktop (Tauri 2):
+    # tauri://localhost on macOS/Linux, http(s)://tauri.localhost on Windows. Mobile (Capacitor):
+    # http://localhost on Android, capacitor://localhost on iOS. Sessions are bearer tokens, not
+    # cookies, so another page on http://localhost gains nothing from being allowed.
+    desktop_origins: str = ("tauri://localhost,http://tauri.localhost,https://tauri.localhost,"
+                            "http://localhost,capacitor://localhost")
 
     # Rate limiting — requests per minute per user (or IP) per endpoint; auth routes are
     # stricter (see routers/auth.py). Off only for tests.
