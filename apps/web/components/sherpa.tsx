@@ -68,7 +68,9 @@ export function Sherpa({
     );
   }
   return (
-    <picture className={cn("inline-block shrink-0 select-none", className)} style={{ width: size, height: size }}>
+    // keyed by pose: Safari doesn't reload an <img> inside <picture> whose src changes, and shows a
+    // broken image instead (seen when a button switches Sherpa to "thinking"), so swap the element
+    <picture key={pose} className={cn("inline-block shrink-0 select-none", className)} style={{ width: size, height: size }}>
       <source media="(prefers-reduced-motion: reduce)" srcSet={still} />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={`/mascot/${pose}.gif`} alt={alt} width={size} height={size} draggable={false} className="pixelated size-full" />
