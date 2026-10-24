@@ -4,6 +4,7 @@ Each section records the hash of every file it cites. After a re-sync, sections
 whose sources changed (or vanished) are marked stale and regenerated from the new
 code; untouched sections are left alone. A changelog records every refresh.
 """
+from ..tracing import traced
 import logging
 import re
 import time
@@ -107,6 +108,7 @@ def _fallback_section(store: RepoStore, sid: str, overview: dict) -> str:
                      for s in overview.get("start_here", [])) or "Start from the entrypoints in the architecture map."
 
 
+@traced("docs")
 def generate_docs(store: RepoStore, llm_override: dict | None = None) -> dict:
     from .overview import build_overview
     override = {k: v for k, v in (llm_override or {}).items() if v is not None}

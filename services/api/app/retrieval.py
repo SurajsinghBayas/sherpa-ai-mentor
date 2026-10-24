@@ -1,4 +1,5 @@
 """Thin retrieval facade — keeps agent code clean and pgvector-swappable."""
+from .tracing import traced
 import re
 from typing import List, Tuple
 from .chunk import Chunk
@@ -6,6 +7,7 @@ from .config import settings
 from .store import RepoStore
 
 
+@traced("retrieve")
 def retrieve(store: RepoStore, query: str, k: int | None = None) -> List[Tuple[Chunk, float]]:
     return store.search(query, k or settings.max_chunks_per_query)
 

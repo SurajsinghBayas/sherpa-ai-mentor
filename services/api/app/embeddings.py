@@ -4,6 +4,7 @@ Uses a Bedrock API key (AWS_BEARER_TOKEN_BEDROCK) against the InvokeModel REST
 endpoint, so no AWS SDK is needed. Every failure is logged; callers fall back to
 TF-IDF search when embeddings are unavailable.
 """
+from .tracing import traced
 import logging
 import threading
 import time
@@ -62,6 +63,7 @@ class Embedder:
             raise RuntimeError(f"bedrock embeddings HTTP {r.status_code}: {r.text[:200]}")
         raise RuntimeError("bedrock embeddings: retries exhausted")
 
+    @traced("embed_documents")
     def embed_documents(self, texts: List[str], on_progress=None) -> List[List[float]]:
         """Embed many texts concurrently. Raises if any request ultimately fails.
 
@@ -92,6 +94,7 @@ class Embedder:
                 ThreadPoolExecutor(max(1, settings.embedding_concurrency)) as pool:
             return list(pool.map(one, texts))
 
+    @traced("embed_query")
     def embed_query(self, text: str) -> Optional[List[float]]:
         if not self.available:
             return None

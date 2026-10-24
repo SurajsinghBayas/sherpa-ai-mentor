@@ -4,6 +4,7 @@ Components and edges come from the real import graph (`analysis.py`); the model
 only names/describes them, and every description must cite code that exists.
 Results are cached per snapshot.
 """
+from ..tracing import traced
 import logging
 import re
 import threading
@@ -115,6 +116,7 @@ def _fallback(store: RepoStore, a: Analysis) -> dict:
         {"file": f, "start_line": ln, "end_line": ln + 15, "why": why} for f, ln, why in a.entrypoints[:3]]}
 
 
+@traced("overview")
 def build_overview(store: RepoStore, llm_override: dict | None = None, refresh: bool = False) -> dict:
     override = {k: v for k, v in (llm_override or {}).items() if v is not None}
     cached = store.cache_get("overview")

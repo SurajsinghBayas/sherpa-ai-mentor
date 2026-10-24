@@ -6,6 +6,7 @@ Commit history (app/history.py) adds when each file appeared, how often it chang
 last did, plus the commit-by-commit timeline the web app plays back. No language model is used,
 so the city is free and quick to build.
 """
+from ..tracing import traced
 import logging
 
 from ..history import get_history
@@ -26,6 +27,7 @@ def _district_names(store: RepoStore) -> dict[str, str]:
     return {c["key"]: c["name"] for c in ov.get("components", []) if isinstance(c, dict) and "key" in c}
 
 
+@traced("city")
 def build_city(store: RepoStore, refresh: bool = False) -> dict:
     cached = store.cache_get("city")
     if cached and not refresh and cached.get("snapshot") == store.snapshot_hash:

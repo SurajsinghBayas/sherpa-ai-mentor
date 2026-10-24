@@ -3,6 +3,7 @@
 If no LLM is configured (or every model fails) the offline extractive composer
 answers from the retrieved chunks, so the product still works with zero setup.
 """
+from ..tracing import traced
 import logging
 from typing import List, Tuple
 
@@ -128,6 +129,7 @@ def _llm_prompt(question: str, ctx: str, repo_map: str, history: list, spoken: b
     )
 
 
+@traced("ask")
 def answer_question(store: RepoStore, question: str, k: int = 10,
                     llm_override: dict | None = None, history: list | None = None,
                     spoken: bool = False) -> dict:

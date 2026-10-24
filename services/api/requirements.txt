@@ -1,6 +1,7 @@
 fastapi==0.115.*
 uvicorn[standard]==0.30.*
 openai==1.*
+langsmith==0.14.4  # optional tracing (app/tracing.py)
 anthropic>=0.40
 pydantic==2.*
 pydantic-settings==2.*

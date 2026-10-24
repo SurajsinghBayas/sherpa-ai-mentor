@@ -4,6 +4,7 @@ Candidates come from hybrid retrieval plus one hop along the import graph. The
 LLM orders them into an execution path and explains each stop; it can only pick
 candidate chunks (and narrow line ranges inside their files), so every step is real code.
 """
+from ..tracing import traced
 import logging
 import re
 
@@ -80,6 +81,7 @@ def _heuristic(store: RepoStore, flow: str, cands: list[Chunk]) -> list[dict]:
     return steps
 
 
+@traced("tour")
 def build_tour(store: RepoStore, flow: str, llm_override: dict | None = None) -> dict:
     override = {k: v for k, v in (llm_override or {}).items() if v is not None}
     cands, callers = _candidates(store, flow)

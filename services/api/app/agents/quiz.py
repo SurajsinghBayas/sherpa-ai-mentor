@@ -10,6 +10,7 @@ settled by the code. Without a model, questions are built straight from static a
 Answers never leave the server before the quiz is submitted. Quizzes are cached per snapshot;
 a retake writes new questions.
 """
+from ..tracing import traced
 import hashlib
 import logging
 import random
@@ -202,6 +203,7 @@ def _saved(store: RepoStore) -> dict:
     return box
 
 
+@traced("quiz")
 def build_quiz(store: RepoStore, llm_override: dict | None = None, fresh: bool = False) -> dict:
     """The latest quiz for this snapshot, or a new one (`fresh`, or none yet)."""
     override = {k: v for k, v in (llm_override or {}).items() if v is not None}

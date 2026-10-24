@@ -8,6 +8,7 @@ the model only names and explains them. Otherwise the model maps the pipeline fr
 code that mentions models, tools, vector stores, training or queues. Every stage cites
 code that exists. Results are cached per snapshot.
 """
+from ..tracing import traced
 import logging
 import re
 
@@ -410,6 +411,7 @@ def _clean(store: RepoStore, raw: dict, declared: dict | None, cites: list, drop
             "stages": stages, "links": links}
 
 
+@traced("machine")
 def build_pipeline(store: RepoStore, llm_override: dict | None = None, refresh: bool = False) -> dict:
     override = {k: v for k, v in (llm_override or {}).items() if v is not None}
     cached = store.cache_get("pipeline")

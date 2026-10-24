@@ -1,4 +1,5 @@
 """Ingest: clone a GitHub URL or walk a local path into chunked snapshot."""
+from .tracing import traced
 import base64
 import hashlib
 import logging
@@ -332,6 +333,7 @@ def fetch_source(repo_url: str | None, local_path: str | None,
     return sources, meta
 
 
+@traced("ingest")
 def ingest_source(repo_url: str | None, local_path: str | None, branch: str = "main",
                   token: str = "") -> Tuple[str, List[Chunk], dict, dict]:
     """Returns (repo_id, chunks, meta, sources)."""

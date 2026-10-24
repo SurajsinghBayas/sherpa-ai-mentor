@@ -11,6 +11,7 @@ import re
 from functools import lru_cache
 
 from .config import load_local_env, settings
+from .tracing import record_usage, tag_model, traced
 
 load_local_env()
 
@@ -116,7 +117,9 @@ class LLMClient:
 
     # ---------- providers ----------
 
+    @traced("llm", run_type="llm")
     def _call(self, prov, mdl, system, user, max_tokens, json_mode, api_key, base_url) -> str:
+        tag_model(prov, mdl)
         messages = [{"role": "system", "content": system},
                     {"role": "user", "content": user}]
         if prov in ("openai", "openrouter", "gemini", "google"):
@@ -147,6 +150,7 @@ class LLMClient:
                     "X-Title": "Sherpa AI Mentor"}
             r = client.chat.completions.create(model=mdl, messages=messages,
                                                temperature=0.2, max_tokens=max_tokens, **extra)
+            record_usage(r.usage)
             return r.choices[0].message.content or ""
         if prov == "anthropic":
             import anthropic
@@ -157,6 +161,7 @@ class LLMClient:
                                       max_retries=1).messages.create(
                 model=mdl, max_tokens=max_tokens, system=system,
                 messages=[{"role": "user", "content": user}])
+            record_usage(m.usage)
             return "".join(b.text for b in m.content if getattr(b, "type", "") == "text")
         if prov == "ollama" or base_url:
             import httpx
@@ -168,6 +173,7 @@ class LLMClient:
                 client.project = None
                 r = client.chat.completions.create(model=mdl, messages=messages,
                                                    temperature=0.2, max_tokens=max_tokens)
+                record_usage(r.usage)
                 return r.choices[0].message.content or ""
             r = httpx.post(f"{base}/api/chat", json={
                 "model": mdl, "messages": messages, "stream": False,

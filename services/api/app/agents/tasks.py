@@ -4,6 +4,7 @@ Signals (TODO/FIXME, untested modules, long functions, missing docstrings) are f
 statically; the LLM picks a diverse set and writes the steps. Every task points
 at real file:line ranges, so a newcomer can open them immediately.
 """
+from ..tracing import traced
 import logging
 
 from ..analysis import task_signals
@@ -52,6 +53,7 @@ def _fallback(store: RepoStore, sigs: list[dict]) -> list[dict]:
     return tasks
 
 
+@traced("starter_tasks")
 def suggest_starter_tasks(store: RepoStore, level: str = "beginner",
                           llm_override: dict | None = None, refresh: bool = False) -> dict:
     override = {k: v for k, v in (llm_override or {}).items() if v is not None}
