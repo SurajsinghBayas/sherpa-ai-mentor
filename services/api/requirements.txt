@@ -15,6 +15,7 @@ alembic==1.13.*
 psycopg[binary]==3.*
 PyJWT==2.*
 passlib[bcrypt]==1.7.*
+bcrypt==4.2.0  # passlib 1.7 breaks on bcrypt 5 ("password cannot be longer than 72 bytes" on every login)
 cryptography==42.*
 slowapi==0.1.*
 limits==3.*
