@@ -20,7 +20,16 @@ function apiBase(): string {
   return "http://localhost:8000";
 }
 
-export const API = apiBase().replace(/\/+$/, "");
+/** An https page can't call an http API (browsers block mixed content), so there the API must be
+ * behind the same domain (nginx passes /api to it; see docs/deployment_guide.md). */
+function reachable(base: string): string {
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && base.startsWith("http:")) {
+    return window.location.origin;
+  }
+  return base;
+}
+
+export const API = reachable(apiBase()).replace(/\/+$/, "");
 const TOKEN_KEY = "sherpa.jwt";
 
 export const tokenStore = {
