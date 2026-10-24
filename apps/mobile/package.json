@@ -4,7 +4,7 @@
   "private": true,
   "description": "Sherpa AI for Android and iOS (Capacitor 8) wrapping the web app in apps/web",
   "scripts": {
-    "web": "SHERPA_API_URL=${SHERPA_API_URL:-https://sherpa-ai.tech} node ../web/scripts/build-desktop.mjs mobile",
+    "web": "node ../web/scripts/build-desktop.mjs mobile",
     "sync": "npm run web && cap sync",
     "android": "npm run sync && cap run android",
     "android:apk": "npm run sync && cd android && ./gradlew assembleDebug",

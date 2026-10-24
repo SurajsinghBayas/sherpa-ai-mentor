@@ -22,7 +22,7 @@ for (const f of SOURCES) if (existsSync(join(web, f))) cpSync(join(web, f), join
 // a junction on Windows: directory symlinks there need admin rights or Developer Mode
 symlinkSync(join(web, "node_modules"), join(work, "node_modules"), process.platform === "win32" ? "junction" : "dir");
 
-const api = process.env.SHERPA_API_URL || "http://localhost:8000";
+const api = process.env.SHERPA_API_URL || "https://sherpa-ai.tech"; // production; set it to test a local API
 console.log(`Building the ${target} export against ${api}`);
 // next's JS entry run by this same node: .bin/next is a .cmd shim on Windows, which spawn can't run
 const r = spawnSync(process.execPath, [join(web, "node_modules", "next", "dist", "bin", "next"), "build"], {
