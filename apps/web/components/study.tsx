@@ -186,10 +186,10 @@ export function Study() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_1fr]">
         <section className="space-y-4 rounded-xl border border-border bg-card p-5">
           <SectionLabel>Record a task</SectionLabel>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <Label className="text-xs">Participant</Label>
               <Input className="mt-1.5" value={participant} onChange={(e) => setParticipant(e.target.value)} />
@@ -241,7 +241,7 @@ export function Study() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border px-4 py-3">
             <span className="font-mono text-2xl tabular-nums">{fmt(elapsed)}</span>
             <Button size="sm" onClick={toggle} variant={running ? "secondary" : "default"}>
               {running ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
@@ -268,7 +268,7 @@ export function Study() {
           </div>
 
           {group === "sherpa" && (
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Rating label="Sherpa was useful" value={ratings.useful} onChange={(v) => setRatings((r) => ({ ...r, useful: v }))} />
               <Rating label="I trusted its answers" value={ratings.trustworthy} onChange={(v) => setRatings((r) => ({ ...r, trustworthy: v }))} />
               <Rating label="I'd use it again" value={ratings.reuse} onChange={(v) => setRatings((r) => ({ ...r, reuse: v }))} />

@@ -38,6 +38,14 @@ function AppShell() {
   }, [path, router]);
 
   useEffect(() => {
+    // the phone apps are fixed-scale like any native app: no pinch or double-tap zoom to pan around in
+    if (!isMobileApp()) return;
+    document
+      .querySelector('meta[name="viewport"]')
+      ?.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover");
+  }, []);
+
+  useEffect(() => {
     if (!isMobileApp()) return;
     import("@capacitor/core")
       .then(({ SystemBars, SystemBarsStyle }) =>

@@ -106,7 +106,7 @@ export default function Landing() {
   return (
     <main>
       {/* Hero */}
-      <section className="container grid items-center gap-12 py-14 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
+      <section className="container grid grid-cols-1 items-center gap-12 py-14 sm:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
         <div className="animate-enter-up">
           <SherpaSays pose="happy" size={64} className="max-w-sm">
             Hi! I&apos;m Sherpa. I&apos;ll help you find your way around a new codebase.
