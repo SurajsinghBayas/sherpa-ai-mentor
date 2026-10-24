@@ -92,3 +92,29 @@ def test_stack_endpoint_needs_login(client):
     r = client.post("/api/auth/register", json={"email": "stack@example.com", "password": "password123"})
     h = {"Authorization": f"Bearer {r.json()['access_token']}"}
     assert client.post("/api/stack", json={"repo_id": "missing1"}, headers=h).status_code == 404
+
+
+GRADLE = {
+    "app/settings.gradle.kts": 'rootProject.name = "app"\ninclude(":core:ui")\n',
+    "app/gradle/libs.versions.toml": '[versions]\nkotlin = "2.2.20"\ncompose = "1.9.0"\ncoroutines = "1.10.2"\n\n'
+                                     '[libraries]\nkotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }\n'
+                                     'junit = "junit:junit:4.13.2"\n\n[bundles]\nasync = ["kotlinx-coroutines-core"]\n\n'
+                                     '[plugins]\nkotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }\n'
+                                     'composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose" }\n',
+    "app/core/ui/build.gradle.kts": 'plugins {\n    alias(libs.plugins.kotlinMultiplatform)\n    alias(libs.plugins.composeMultiplatform)\n'
+                                    '    id("com.android.library")\n}\ndependencies {\n    implementation(libs.bundles.async)\n'
+                                    '    implementation(compose.material3)\n    testImplementation(libs.junit)\n}\n',
+    "app/core/ui/Main.kt": "fun main() {}\n",
+}
+
+
+def test_gradle_version_catalog_and_nested_modules():
+    r = build_stack(store(GRADLE, "stack-gradle"))
+    assert [g["name"] for g in r["groups"]] == ["app"]  # the nested module joins its build
+    items = _items(r, "app")
+    assert items["Kotlin Multiplatform"]["version"] == "2.2.20"
+    assert items["Compose Multiplatform"]["version"] == "1.9.0"
+    assert items["Kotlin Coroutines"]["version"] == "1.10.2"
+    assert items["Kotlin Coroutines"]["cite"]["file"] == "app/core/ui/build.gradle.kts"
+    assert items["Android"]["category"] == "framework"
+    assert items["JUnit"]["dev"] is True

@@ -1,7 +1,8 @@
 """Tech stack: what a repo is built with, read from its own manifests.
 
 Each directory with a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml,
-Gemfile, composer.json, pom.xml, build.gradle, *.csproj) is a workspace; its dependencies are
+Gemfile, composer.json, pom.xml, build.gradle, *.csproj) is a workspace — except Gradle, whose modules
+join the build that holds settings.gradle, with libs.* aliases read from gradle/libs.versions.toml; its dependencies are
 sorted into categories (frameworks, databases, AI, testing …). Dockerfiles, compose files, CI
 workflows and deploy configs form one more branch for the whole repo. Every entry cites the line
 that declares it, so the tree can be checked like any answer. No language model is used, so the
@@ -133,9 +134,59 @@ _KNOWN = {
         "opentelemetry-*": "OpenTelemetry", "@opentelemetry/*": "OpenTelemetry", "prometheus-client": "Prometheus",
     },
 }
+# Gradle (Kotlin, Android, JVM): matched on "group:artifact" or a plugin id, before the bare artifact
+_KNOWN_GRADLE = {
+    "runtime": {
+        "org.jetbrains.kotlin.android": "Kotlin", "org.jetbrains.kotlin.jvm": "Kotlin",
+        "org.jetbrains.kotlin:kotlin-stdlib*": "Kotlin",
+    },
+    "framework": {
+        "org.jetbrains.kotlin.multiplatform": "Kotlin Multiplatform", "com.android.application": "Android",
+        "com.android.library": "Android", "com.android.kotlin.multiplatform.library": "Android",
+        "org.springframework.boot*": "Spring Boot", "io.ktor:ktor-server*": "Ktor server",
+        "io.quarkus*": "Quarkus", "io.micronaut*": "Micronaut",
+    },
+    "ui": {
+        "org.jetbrains.compose*": "Compose Multiplatform", "compose.*": "Compose Multiplatform",
+        "androidx.compose.material3*": "Material 3 (Compose)", "androidx.compose*": "Jetpack Compose",
+        "androidx.activity:activity-compose": "Jetpack Compose", "androidx.navigation*": "Navigation",
+        "androidx.appcompat*": "AppCompat", "com.google.android.material*": "Material Components",
+        "io.coil-kt*": "Coil", "com.github.bumptech.glide*": "Glide", "org.jetbrains.kotlin.plugin.compose": "Compose compiler",
+    },
+    "data": {
+        "org.jetbrains.kotlinx:kotlinx-coroutines*": "Kotlin Coroutines",
+        "org.jetbrains.kotlinx:kotlinx-serialization*": "kotlinx.serialization",
+        "org.jetbrains.kotlin.plugin.serialization": "kotlinx.serialization",
+        "org.jetbrains.kotlinx:kotlinx-datetime*": "kotlinx-datetime", "androidx.lifecycle*": "Lifecycle & ViewModel",
+        "org.jetbrains.androidx.lifecycle*": "Lifecycle & ViewModel", "io.insert-koin*": "Koin",
+        "com.google.dagger*": "Dagger / Hilt", "com.google.dagger.hilt.android": "Dagger / Hilt",
+        "com.squareup.retrofit2*": "Retrofit", "com.squareup.okhttp3*": "OkHttp", "io.ktor*": "Ktor client",
+        "com.google.code.gson*": "Gson", "com.squareup.moshi*": "Moshi", "androidx.datastore*": "DataStore",
+        "androidx.paging*": "Paging", "androidx.work*": "WorkManager",
+    },
+    "database": {
+        "androidx.room*": "Room", "app.cash.sqldelight*": "SQLDelight", "io.realm*": "Realm",
+        "org.jetbrains.exposed*": "Exposed",
+    },
+    "auth": {"com.google.firebase:firebase-auth*": "Firebase Auth"},
+    "infra": {"com.google.firebase*": "Firebase", "com.google.gms.google-services": "Firebase"},
+    "testing": {
+        "org.jetbrains.kotlin:kotlin-test*": "Kotlin Test", "androidx.test.espresso*": "Espresso",
+        "androidx.test*": "AndroidX Test", "androidx.compose.ui:ui-test*": "Compose UI tests",
+        "io.mockk*": "MockK", "io.kotest*": "Kotest", "app.cash.turbine*": "Turbine",
+        "org.robolectric*": "Robolectric", "junit:junit": "JUnit", "org.junit*": "JUnit",
+    },
+    "tooling": {
+        "androidx.core*": "AndroidX Core", "com.google.devtools.ksp": "KSP",
+        "org.jetbrains.compose.hot-reload": "Compose Hot Reload",
+        "com.vanniktech.maven.publish": "Maven Central publishing", "maven-publish": "Maven publishing",
+        "org.jetbrains.dokka": "Dokka", "io.gitlab.arturbosch.detekt": "detekt",
+        "org.jlleitschuh.gradle.ktlint": "ktlint", "com.diffplug.spotless": "Spotless",
+    },
+}
 _EXACT: dict[str, tuple[str, str]] = {}
 _PREFIX: list[tuple[str, str, str]] = []
-for _cat, _names in _KNOWN.items():
+for _cat, _names in [*_KNOWN_GRADLE.items(), *_KNOWN.items()]:
     for _k, _label in _names.items():
         if _k.endswith("*"):
             _PREFIX.append((_k[:-1].lower(), _label, _cat))
@@ -344,11 +395,86 @@ def _maven(lines: list[str]):
             yield m.group(1), "", i, False
 
 
-def _gradle(lines: list[str]):
+_GRADLE_CONF = r"(?:implementation|api|compileOnly|runtimeOnly|testImplementation|androidTestImplementation|" \
+               r"debugImplementation|testRuntimeOnly|kapt|ksp|annotationProcessor|coreLibraryDesugaring)"
+
+
+def _accessor(key: str) -> str:
+    """Catalog key → how build files name it: "androidx-activity_compose" → "androidx.activity.compose"."""
+    return re.sub(r"[-_.]", ".", key).lower()
+
+
+def version_catalog(lines: list[str]) -> dict:
+    """gradle/libs.versions.toml → {"libraries": {accessor: (group:artifact, version)}, "plugins": {…}}."""
+    versions: dict[str, str] = {}
+    entries: dict[str, list] = {"libraries": [], "plugins": [], "bundles": []}
+    table = ""
+    for raw in lines:
+        ln = raw.split("#", 1)[0].strip()
+        if m := re.match(r"\[([\w-]+)\]$", ln):
+            table = m.group(1)
+            continue
+        m = re.match(r"""([\w.-]+)\s*=\s*(.+)$""", ln)
+        if not m:
+            continue
+        key, val = m.group(1), m.group(2)
+        if table == "versions":
+            v = re.search(r'"([^"]+)"', val)
+            versions[key] = v.group(1) if v else ""
+        elif table in entries:
+            entries[table].append((key, val))
+
+    def field(val, name):
+        f = re.search(name + r'\s*=\s*"([^"]+)"', val)
+        return f.group(1) if f else ""
+
+    def ver(val):
+        if ref := field(val, r"version\.ref"):
+            return versions.get(ref, "")
+        return field(val, r"(?<![.\w])version")
+
+    out: dict[str, dict] = {"libraries": {}, "plugins": {}, "bundles": {}}
+    for key, val in entries["libraries"]:
+        if val.startswith('"'):  # "group:artifact:version"
+            parts = val.strip('"').split(":")
+            coord, v = ":".join(parts[:2]), (parts[2] if len(parts) > 2 else "")
+        else:
+            coord = field(val, "module") or f'{field(val, "group")}:{field(val, "name")}'
+            v = ver(val)
+        out["libraries"][_accessor(key)] = (coord, v)
+    for key, val in entries["plugins"]:
+        pid, v = (val.strip('"').split(":") + [""])[:2] if val.startswith('"') else (field(val, "id"), ver(val))
+        out["plugins"][_accessor(key)] = (pid, v)
+    for key, val in entries["bundles"]:
+        out["bundles"][_accessor(key)] = [_accessor(k) for k in re.findall(r'"([^"]+)"', val)]
+    return out
+
+
+def _gradle(lines: list[str], catalog: dict | None = None):
+    """Dependencies and plugins of a build.gradle(.kts), resolving version-catalog aliases (libs.*)."""
+    cat = catalog or {"libraries": {}, "plugins": {}, "bundles": {}}
     for i, ln in enumerate(lines, 1):
-        m = re.search(r"""(?:implementation|api|compileOnly|runtimeOnly|testImplementation|kapt|ksp)\s*\(?\s*['"]([^:'"]+):([^:'"]+)(?::([^'"]+))?['"]""", ln)
-        if m:
-            yield m.group(2), m.group(3) or "", i, "test" in ln.split("(")[0]
+        code = ln.split("//", 1)[0]
+        test = bool(re.search(r"\b(?:test|androidTest)\w*", code.split("(")[0], re.I))
+        if m := re.search(_GRADLE_CONF + r"""\s*\(?\s*(?:platform\s*\(\s*)?['"]([^:'"]+):([^:'"]+)(?::([^'"]+))?['"]""", code):
+            yield f"{m.group(1)}:{m.group(2)}", m.group(3) or "", i, test
+        elif m := re.search(_GRADLE_CONF + r"\s*\(?\s*(?:platform\s*\(\s*)?libs\.([\w.]+)", code):
+            ref = m.group(1).lower()
+            if ref.startswith("bundles."):
+                for lib in cat["bundles"].get(ref[8:], []):
+                    if lib in cat["libraries"]:
+                        yield *cat["libraries"][lib], i, test
+            elif ref in cat["libraries"]:
+                yield *cat["libraries"][ref], i, test
+        elif m := re.search(_GRADLE_CONF + r"\s*\(?\s*(compose\.[\w.]+)", code):
+            yield m.group(1), "", i, test  # Compose Multiplatform accessors: compose.material3 …
+        elif m := re.search(r"alias\s*\(\s*libs\.plugins\.([\w.]+)", code):
+            if p := cat["plugins"].get(m.group(1).lower()):
+                yield *p, i, False
+        elif m := re.search(r"""^\s*id\s*\(?\s*['"]([\w.-]+)['"]\s*\)?(?:\s*version\s*\(?\s*['"]([^'"]+)['"])?""", code):
+            yield m.group(1), m.group(2) or "", i, False
+        elif m := re.search(r"""^\s*kotlin\s*\(\s*['"]([\w.-]+)['"]\s*\)""", code):
+            yield f"org.jetbrains.kotlin.{m.group(1)}", "", i, False
 
 
 def _csproj(lines: list[str]):
@@ -393,7 +519,7 @@ def _item(pkg: str, version: str, file: str, line: int, dev: bool) -> dict | Non
                 "dev": False, "cite": _cite(file, line)}
     if pkg.startswith("@types/") or pkg == "react-dom":
         return None  # type stubs and React's renderer say nothing new
-    known = classify(pkg)
+    known = classify(pkg) or (classify(pkg.split(":", 1)[1]) if ":" in pkg else None)
     label, cat = known if known else (pkg, "other")
     return {"name": label, "package": pkg, "category": cat, "version": _version(version), "dev": dev,
             "cite": _cite(file, line)}
@@ -494,11 +620,26 @@ def build_stack(store: RepoStore, refresh: bool = False) -> dict:
         return cached
     files = sorted(store.files())
     workspaces: dict[str, dict] = {}
+    # a Gradle build is one workspace however deep its modules sit: the folder with settings.gradle
+    gradle_roots = sorted({f.rsplit("/", 1)[0] if "/" in f else "" for f in files
+                           if f.rsplit("/", 1)[-1] in ("settings.gradle", "settings.gradle.kts")},
+                          key=len, reverse=True)
+    catalogs: dict[str, dict] = {}
     for f in files:
         name = f.rsplit("/", 1)[-1]
         if not _is_manifest(f) or not (parse := _parser(name)):
             continue
         d = f.rsplit("/", 1)[0] if "/" in f else ""
+        if name.startswith("build.gradle"):
+            d = next((r for r in gradle_roots if r == "" or d == r or d.startswith(r + "/")), d)
+            if d not in catalogs:
+                toml = f"{d}/gradle/libs.versions.toml" if d else "gradle/libs.versions.toml"
+                try:
+                    catalogs[d] = version_catalog(store.lines(toml)) if toml in files else {}
+                except Exception as e:  # noqa: BLE001
+                    log.warning("stack: could not parse %s (%s)", toml, e)
+                    catalogs[d] = {}
+            parse = (lambda lines, c=catalogs[d] or None: _gradle(lines, c))
         ws = workspaces.setdefault(d, {"path": d, "manifests": [], "items": []})
         ws["manifests"].append(f)
         try:
