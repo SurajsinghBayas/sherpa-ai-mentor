@@ -118,3 +118,66 @@ def test_gradle_version_catalog_and_nested_modules():
     assert items["Kotlin Coroutines"]["cite"]["file"] == "app/core/ui/build.gradle.kts"
     assert items["Android"]["category"] == "framework"
     assert items["JUnit"]["dev"] is True
+
+
+ECOSYSTEMS = {
+    "mobile/pubspec.yaml": "name: app\nenvironment:\n  sdk: '>=3.3.0 <4.0.0'\n\ndependencies:\n  flutter:\n    sdk: flutter\n"
+                           "  flutter_riverpod: ^2.5.1\n  dio: ^5.4.0\n\ndev_dependencies:\n  flutter_test:\n    sdk: flutter\n",
+    "ios/Package.swift": '// swift-tools-version:5.9\nimport PackageDescription\nlet package = Package(\n  dependencies: [\n'
+                         '    .package(url: "https://github.com/Alamofire/Alamofire.git", from: "5.8.0"),\n  ]\n)\n',
+    "ios/App.xcodeproj/project.pbxproj": '\t\trepositoryURL = "https://github.com/onevcat/Kingfisher";\n'
+                                         '\t\trequirement = {\n\t\t\tkind = upToNextMajorVersion;\n\t\t\tminimumVersion = 7.10.0;\n\t\t};\n',
+    "ios/Podfile": "platform :ios, '15.0'\ntarget 'App' do\n  pod 'SnapKit', '~> 5.6'\nend\n",
+    "engine/CMakeLists.txt": "cmake_minimum_required(VERSION 3.20)\nproject(engine LANGUAGES CXX)\nset(CMAKE_CXX_STANDARD 20)\n"
+                             "find_package(Boost 1.82 REQUIRED)\nadd_subdirectory(core)\n",
+    "engine/core/CMakeLists.txt": "find_package(fmt REQUIRED)\nenable_testing()\nfind_package(GTest)\n",
+    "engine/vcpkg.json": '{\n  "dependencies": ["spdlog", {"name": "nlohmann-json"}]\n}\n',
+    "web/mix.exs": 'defmodule Web.MixProject do\n  def project, do: [elixir: "~> 1.15", deps: deps()]\n  defp deps do\n'
+                   '    [\n      {:phoenix, "~> 1.7.10"},\n      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}\n    ]\n  end\nend\n',
+    "svc/build.sbt": 'scalaVersion := "3.3.1"\nlibraryDependencies ++= Seq(\n  "org.typelevel" %% "cats-core" % "2.10.0",\n'
+                     '  "org.scalatest" %% "scalatest" % "3.2.17" % Test\n)\n',
+    "java/pom.xml": "<project>\n  <parent>\n    <groupId>org.springframework.boot</groupId>\n"
+                    "    <artifactId>spring-boot-starter-parent</artifactId>\n    <version>3.2.0</version>\n  </parent>\n"
+                    "  <artifactId>shop</artifactId>\n  <modules>\n    <module>api</module>\n  </modules>\n"
+                    "  <properties>\n    <java.version>21</java.version>\n    <pg.version>42.7.1</pg.version>\n  </properties>\n</project>\n",
+    "java/api/pom.xml": "<project>\n  <artifactId>api</artifactId>\n  <dependencies>\n    <dependency>\n"
+                        "      <groupId>org.postgresql</groupId>\n      <artifactId>postgresql</artifactId>\n"
+                        "      <version>${pg.version}</version>\n    </dependency>\n    <dependency>\n"
+                        "      <groupId>org.junit.jupiter</groupId>\n      <artifactId>junit-jupiter</artifactId>\n"
+                        "      <scope>test</scope>\n    </dependency>\n  </dependencies>\n  <build><plugins><plugin>\n"
+                        "    <artifactId>maven-compiler-plugin</artifactId>\n  </plugin></plugins></build>\n</project>\n",
+    "dotnet/Shop.fsproj": '<Project Sdk="Microsoft.NET.Sdk.Web">\n  <PropertyGroup>\n    <TargetFramework>net8.0</TargetFramework>\n'
+                          '  </PropertyGroup>\n  <ItemGroup>\n    <PackageReference Include="Npgsql" Version="8.0.1" />\n  </ItemGroup>\n</Project>\n',
+    "stats/DESCRIPTION": "Package: stats\nDepends: R (>= 4.1)\nImports:\n    dplyr (>= 1.1.0),\n    ggplot2\nSuggests: testthat\n",
+    "py/setup.py": 'from setuptools import setup\nsetup(\n    name="x",\n    python_requires=">=3.9",\n'
+                   '    install_requires=[\n        "requests>=2.31",\n        "numpy",\n    ],\n)\n',
+}
+
+
+def test_popular_ecosystems():
+    r = build_stack(store(ECOSYSTEMS, "stack-eco"))
+    names = [g["name"] for g in r["groups"]]
+    assert names == ["dotnet", "engine", "ios", "java", "mobile", "py", "stats", "svc", "web"]  # one per build
+    mobile = _items(r, "mobile")
+    assert mobile["Flutter"]["category"] == "framework" and mobile["Dart"]["version"] == ">=3.3.0 <4.0.0"
+    assert mobile["Riverpod"]["version"] == "2.5.1" and mobile["Flutter test"]["dev"] is True
+    ios = _items(r, "ios")
+    assert ios["Alamofire"]["version"] == "5.8.0" and ios["Kingfisher"]["version"] == "7.10.0"
+    assert ios["SnapKit"]["category"] == "ui" and ios["Swift"]["version"] == "5.9" and ios["iOS"]["version"] == "15.0"
+    engine = _items(r, "engine")
+    assert engine["C++"]["version"] in ("", "C++20") and engine["Boost"]["version"] == "1.82"
+    assert {"fmt", "GoogleTest", "spdlog", "nlohmann/json", "CMake"} <= set(engine)
+    web = _items(r, "web")
+    assert web["Phoenix"]["version"] == "~> 1.7.10" and web["Credo"]["dev"] is True and web["Elixir"]["version"] == "~> 1.15"
+    svc = _items(r, "svc")
+    assert svc["Cats"]["version"] == "2.10.0" and svc["ScalaTest"]["dev"] is True and svc["Scala"]["version"] == "3.3.1"
+    java = _items(r, "java")
+    assert java["Spring Boot"]["version"] == "3.2.0" and java["Java"]["version"] == "21"
+    assert java["PostgreSQL"]["version"] == "42.7.1" and java["JUnit"]["dev"] is True
+    assert "shop" not in java and "api" not in java and "maven-compiler-plugin" not in java
+    dotnet = _items(r, "dotnet")
+    assert dotnet["ASP.NET Core"]["category"] == "framework" and dotnet["PostgreSQL (Npgsql)"]["version"] == "8.0.1"
+    stats = _items(r, "stats")
+    assert stats["R"]["version"] == ">= 4.1" and stats["dplyr"]["version"] == ">= 1.1.0" and stats["testthat"]["dev"] is True
+    py = _items(r, "py")
+    assert py["Python"]["version"] == ">=3.9" and "requests" in {i["package"] for i in py.values()}
