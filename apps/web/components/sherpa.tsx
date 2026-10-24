@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import { cn } from "../lib/utils";
 
 /** Sherpa, the guide character from the style guide. Each pose matches what the app is doing. */
@@ -42,38 +45,53 @@ const LABEL: Record<Pose, string> = {
 
 /**
  * The full-body character. Animated poses are GIFs; people who prefer reduced motion get the still
- * SVG through <picture>, so no JavaScript or hydration is involved. Sizes that are multiples of 16 keep
- * the pixel grid crisp.
+ * SVG through <picture>. Sizes that are multiples of 16 keep the pixel grid crisp.
  */
-export function Sherpa({
-  pose = "happy",
-  size = 64,
-  animated = true,
-  decorative = false,
-  className,
-}: {
+export function Sherpa(props: SherpaProps) {
+  // a fresh element per pose: Safari doesn't reload an <img> inside <picture> whose src changes
+  return <Figure key={props.pose ?? "happy"} {...props} />;
+}
+
+type SherpaProps = {
   pose?: Pose;
   size?: number;
   animated?: boolean;
   /** true when nearby text already says what Sherpa is doing */
   decorative?: boolean;
   className?: string;
-}) {
+};
+
+function Figure({ pose = "happy", size = 64, animated = true, decorative = false, className }: SherpaProps) {
   const still = `/mascot/${STILL[pose]}.svg`;
   const alt = decorative ? "" : LABEL[pose];
-  if (!animated) {
+  // GIF, then the still SVG, then empty space: an image that fails to load never shows the browser's
+  // broken-image icon. Safari fails images that are still loading once the page starts navigating
+  // away (the GitHub button), and has shown it for the thinking pose during long requests.
+  const [stage, setStage] = useState<"gif" | "still" | "none">(animated ? "gif" : "still");
+  const img = useRef<HTMLImageElement>(null);
+  // both the error event and the hydration check can report one failure: count it once per stage
+  const failed = (at: "gif" | "still") => setStage((s) => (s !== at ? s : at === "gif" ? "still" : "none"));
+  useEffect(() => {
+    // an image that failed before hydration never fires onError
+    const el = img.current;
+    if (stage !== "none" && el?.complete && el.naturalWidth === 0) failed(stage);
+  }, [stage]);
+
+  const box = cn("inline-block shrink-0 select-none", className);
+  if (stage === "none") {
+    return <span role={decorative ? undefined : "img"} aria-label={alt || undefined} className={box} style={{ width: size, height: size }} />;
+  }
+  if (stage === "still") {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={still} alt={alt} width={size} height={size} draggable={false} className={cn("pixelated shrink-0 select-none", className)} />
+      <img ref={img} src={still} alt={alt} width={size} height={size} draggable={false} onError={() => failed("still")} className={cn("pixelated", box)} />
     );
   }
   return (
-    // keyed by pose: Safari doesn't reload an <img> inside <picture> whose src changes, and shows a
-    // broken image instead (seen when a button switches Sherpa to "thinking"), so swap the element
-    <picture key={pose} className={cn("inline-block shrink-0 select-none", className)} style={{ width: size, height: size }}>
+    <picture className={box} style={{ width: size, height: size }}>
       <source media="(prefers-reduced-motion: reduce)" srcSet={still} />
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={`/mascot/${pose}.gif`} alt={alt} width={size} height={size} draggable={false} className="pixelated size-full" />
+      <img ref={img} src={`/mascot/${pose}.gif`} alt={alt} width={size} height={size} draggable={false} onError={() => failed("gif")} className="pixelated size-full" />
     </picture>
   );
 }
