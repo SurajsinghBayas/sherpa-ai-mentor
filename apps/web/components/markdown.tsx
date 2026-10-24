@@ -13,6 +13,9 @@ import type { CommitRef } from "../lib/api";
 // [path/to/file.py:12-30] → a markdown link with a cite: href, rendered as a chip.
 const CITE = /\[([^\[\]\s:]+?):L?(\d+)(?:\s*[-–]\s*L?(\d+))?\](?!\()/g;
 
+// [path:12-30](anything) → [path:12-30]: models sometimes give a citation a link target (even file:///…)
+const CITE_LINK = /(\[[^\[\]\s:]+?:L?\d+(?:\s*[-–]\s*L?\d+)?\])\((?:[^()\n]|\([^()\n]*\))*\)/g;
+
 // [commit 1a2b3c4] → a commit: link, rendered as a chip that opens the commit on its host.
 const COMMIT = /\[commit ([0-9a-f]{6,40})\](?!\()/gi;
 const Commits = createContext<CommitRef[]>([]);
@@ -44,6 +47,7 @@ function linkCitations(md: string): string {
       i % 2 === 1
         ? part
         : part
+            .replace(CITE_LINK, "$1")
             .replace(CITE, (_m, file: string, a: string, b?: string) => {
               const end = b ?? a;
               return `[${file}:${a}-${end}](cite:${encodeURIComponent(file)}:${a}:${end})`;
@@ -60,6 +64,21 @@ const components: Components = {
       if (file) return <CitationChip file={decodeURIComponent(file)} start={+a} end={+b} variant="inline" />;
     }
     if (href?.startsWith("commit:")) return <CommitChip sha={href.slice(7)} />;
+    if (!href || !/^(https?:|mailto:)/i.test(href)) {
+      // not a web link: a model-made repo reference ([a.py:3-9](…), [main.py](main.py), [x](src/x.py#L4-L9)).
+      // Opening it would load this app's own page in a new tab, so open the code viewer instead.
+      const label = typeof children === "string" ? children : Array.isArray(children) && children.length === 1 && typeof children[0] === "string" ? children[0] : "";
+      const lc = /^`?([^\s:`]+):L?(\d+)(?:\s*[-–]\s*L?(\d+))?`?$/.exec(label.trim());
+      if (lc) return <CitationChip file={lc[1]} start={+lc[2]} end={+(lc[3] ?? lc[2])} variant="inline" />;
+      const path = (href ?? "").replace(/^\.?\//, "");
+      const anchor = /#L(\d+)(?:-L?(\d+))?$/.exec(path);
+      if (path && /^[\w@./-]+\.[\w]+(#L\d+(-L?\d+)?)?$/.test(path)) {
+        const file = path.replace(/#.*$/, "");
+        const a = anchor ? +anchor[1] : 1;
+        return <CitationChip file={file} start={a} end={anchor?.[2] ? +anchor[2] : a} variant="inline" />;
+      }
+      return <span className="font-medium">{children}</span>;
+    }
     return (
       <a href={href} target="_blank" rel="noreferrer" className="font-medium text-primary underline-offset-2 hover:underline">
         {children}

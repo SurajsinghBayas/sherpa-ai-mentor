@@ -114,3 +114,22 @@ def register_user(session, user_in):
     # …but asking about the private route still finds it
     top = s.search("how does the private users route seed accounts in dev?", k=3)[0][0]
     assert top.file.endswith("private.py")
+
+
+def test_model_made_links_become_citations_not_new_tabs():
+    """[main.py](main.py) and [a.py:3-9](file:///…) open the app's own page in a new tab: unlink them."""
+    from app.agents.common import verify_citations
+    from app.chunk import chunk_file
+    from app.store import RepoStore
+    src = {"main.py": "\n".join(f"x{i}" for i in range(1, 40)),
+           "frontend/app.js": "\n".join(f"y{i}" for i in range(1, 80))}
+    s = RepoStore("links")
+    s.save([c for f, t in src.items() for c in chunk_file(t, f)], {"name": "x"}, src)
+    md = ("Backend ([main.py](main.py)). [main.py:27-27](file:///home/runner/showSection (function) "
+          "frontend/app.js:14-14; addSkill (function) frontend/app.js:47-47/frontend/app.js#L1) "
+          "and [the UI](./frontend/app.js#L5-L9). Docs: [guide](https://example.com/g).")
+    clean, cites, dropped = verify_citations(s, md)
+    assert clean == ("Backend (`main.py`). [main.py:27-27] and [frontend/app.js:5-9]. "
+                     "Docs: [guide](https://example.com/g).")
+    assert [(c["file"], c["start_line"]) for c in cites] == [("main.py", 27), ("frontend/app.js", 5)]
+    assert dropped == []

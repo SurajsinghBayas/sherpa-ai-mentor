@@ -81,9 +81,64 @@ def split_multi(markdown: str) -> str:
     return _MULTI.sub(sub, markdown)
 
 
+_LINK_START = re.compile(r"\[([^\[\]\n]{1,300})\]\(")
+_LABEL_CITE = re.compile(r"^`?([^\s:`]+):L?(\d+)(?:\s*[-–]\s*L?(\d+))?`?$")
+_ANCHOR = re.compile(r"#L(\d+)(?:-L?(\d+))?$")
+_EXTERNAL = ("http://", "https://", "mailto:")
+
+
+def _resolve_loose(store: RepoStore, path: str) -> str | None:
+    """A repo file named by a model-made link: `app.js`, `./src/app.js`, `/home/runner/x/src/app.js`."""
+    parts = [p for p in path.replace("\\", "/").split("/") if p not in ("", ".")]
+    for i in range(min(len(parts), 8)):  # drop leading dirs the snapshot doesn't have
+        if real := store.resolve("/".join(parts[i:])):
+            return real
+    return None
+
+
+def unlink_markdown(store: RepoStore, markdown: str) -> str:
+    """Models write repo references as markdown links: [main.py](main.py), [a.py:3-9](file:///…),
+    [x](src/x.py#L4-L9). In the browser those open a new tab on the app's own domain. Keep only
+    web links; turn the rest into citations ([file:a-b]) or plain code."""
+    out, pos = [], 0
+    for m in _LINK_START.finditer(markdown):
+        if m.start() < pos:
+            continue
+        # the destination may hold parentheses ("x (function) y"): scan to the matching ")"
+        depth, j = 1, m.end()
+        while j < len(markdown) and j - m.end() < 2000 and markdown[j] != "\n":
+            depth += {"(": 1, ")": -1}.get(markdown[j], 0)
+            if depth == 0:
+                break
+            j += 1
+        if depth:
+            continue
+        label, dest = m.group(1).strip(), markdown[m.end():j].strip()
+        if dest.lower().startswith(_EXTERNAL) and not _LABEL_CITE.match(label):
+            continue  # a real web link
+        if c := _LABEL_CITE.match(label):
+            new = f"[{c.group(1)}:{c.group(2)}-{c.group(3) or c.group(2)}]"
+        else:
+            target = dest.split()[0] if dest else ""
+            target = re.sub(r"^file://", "", target)
+            a = _ANCHOR.search(target)
+            target = _ANCHOR.sub("", target)
+            real = _resolve_loose(store, target) if target and "://" not in target else None
+            real = real or _resolve_loose(store, label.strip("`"))
+            if real and a:
+                new = ref(real, int(a.group(1)), int(a.group(2) or a.group(1)))
+            elif real or re.fullmatch(r"[\w./-]+", label.strip("`")):
+                new = f"`{label.strip('`')}`"
+            else:
+                new = label
+        out.append(markdown[pos:m.start()] + new)
+        pos = j + 1
+    return "".join(out) + markdown[pos:]
+
+
 def verify_citations(store: RepoStore, markdown: str) -> Tuple[str, list, list]:
     """Parse [file:L1-L2]; keep only real ones. Returns (clean_md, citations, dropped)."""
-    markdown = split_multi(markdown)
+    markdown = split_multi(unlink_markdown(store, markdown))
     cites: list = []
     dropped: list = []
     seen = set()
