@@ -14,8 +14,8 @@ the apps hide those buttons, as the desktop app does.
 
 ## API address
 
-The web export is built against `SHERPA_API_URL`, which defaults to the production API
-(`http://65.2.204.165:8000`). To point at another server:
+The web export is built against `SHERPA_API_URL`, which defaults to the production site
+(`https://sherpa-ai.tech`, where nginx passes `/api` to the API). To point at another server:
 
 ```bash
 SHERPA_API_URL=https://api.example.com npm run sync

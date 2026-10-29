@@ -1,7 +1,7 @@
 # iOS app (apps/mobile, Capacitor): an unsigned .ipa built on a macOS runner, since building needs
 # Xcode. Download it from the run's "Artifacts". It must be signed before an iPhone will install it:
 # sideload it with your Apple ID (Sideloadly or AltStore re-sign it), or add signing with an Apple
-# Developer account. The app calls the production API (http://65.2.204.165:8000) unless the
+# Developer account. The app calls the production API (https://sherpa-ai.tech) unless the
 # repository variable SHERPA_API_URL names another.
 name: ios
 on:
@@ -22,7 +22,7 @@ jobs:
   build:
     runs-on: macos-15
     env:
-      SHERPA_API_URL: ${{ vars.SHERPA_API_URL || 'http://65.2.204.165:8000' }}
+      SHERPA_API_URL: ${{ vars.SHERPA_API_URL || 'https://sherpa-ai.tech' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
