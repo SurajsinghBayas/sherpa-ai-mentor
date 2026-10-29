@@ -1,5 +1,5 @@
 # Desktop installers: builds the Tauri app (apps/desktop) natively on Windows and macOS.
-# Download them from the run's "Artifacts". The apps call the production API (https://sherpa-ai.tech)
+# Download them from the run's "Artifacts". The apps call the production API (http://65.2.204.165:8000)
 # unless the repository variable SHERPA_API_URL names another.
 name: desktop
 on:
@@ -34,7 +34,7 @@ jobs:
             files: apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
     runs-on: ${{ matrix.os }}
     env:
-      SHERPA_API_URL: ${{ vars.SHERPA_API_URL || 'https://sherpa-ai.tech' }}
+      SHERPA_API_URL: ${{ vars.SHERPA_API_URL || 'http://65.2.204.165:8000' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

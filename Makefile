@@ -18,7 +18,7 @@ dev:
 desktop:
 	cd $(DESKTOP_DIR) && PATH="$$HOME/.cargo/bin:$$PATH" npm run dev
 
-# Sherpa AI.app + .dmg in apps/desktop/src-tauri/target/release/bundle; API from SHERPA_API_URL (default https://sherpa-ai.tech)
+# Sherpa AI.app + .dmg in apps/desktop/src-tauri/target/release/bundle; API from SHERPA_API_URL (default http://65.2.204.165:8000)
 desktop-build:
 	cd $(DESKTOP_DIR) && PATH="$$HOME/.cargo/bin:$$PATH" npm run build
 
